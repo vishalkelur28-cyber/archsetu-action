@@ -20,14 +20,14 @@ Below is the report ArchSetu produced for [pocketbase](https://github.com/pocket
 >
 > <details><summary>Direct callers</summary>
 >
-> - `exactWildcardMatch` ← `TestCorsExactWildcardMatch` (`apis/middlewares_cors_test.go:5`), `CORS` (`apis/middlewares_cors.go:131`)
-> - `CORS` ← `Serve` (`apis/serve.go:61`)
+> - `exactWildcardMatch` (`apis/middlewares_cors.go:287`) ← `TestCorsExactWildcardMatch` (`apis/middlewares_cors_test.go:5`), `CORS` (`apis/middlewares_cors.go:131`)
+> - `CORS` (`apis/middlewares_cors.go:131`) ← `Serve` (`apis/serve.go:61`)
 >
 > </details>
 >
 > <details><summary>How this was worked out</summary>
 >
-> ArchSetu parsed the whole repository inside this run and built its call graph, then matched the changed lines against it. Nothing was uploaded. "Within 3 calls" counts every function that reaches the changed one through at most 3 calls, direct callers included; risk is graded from that count. Calls are matched by function name. A caller in another file counts only where it could see the function: a function that is not exported counts callers in its own directory, and one whose name other files also declare counts callers in other directories only where an import shows which one they mean. Dynamic dispatch, reflection and callers outside this repository are invisible, so treat the counts as a lower bound. The same code always gives the same report.
+> ArchSetu parsed the whole repository inside this run and built its call graph, then matched the changed lines against it. Nothing was uploaded. "Within 3 calls" counts every function that reaches the changed one through at most 3 calls, direct callers included; risk is graded from that count. Calls are matched by function name, and a caller in another file counts only where the name can mean just this function: one no other file in its directory declares, or - from further away - an exported one that no other file declares, or that the caller's file imports. So a count can miss callers - dynamic dispatch, reflection, calls on objects whose type the name does not settle, callers outside this repository - and can include a call to a same-named function in a library or another type. Every count lists its callers above, so each one can be checked. The same code always gives the same report.
 >
 > Compared with `768087993ece` (HEAD~1). ArchSetu CLI 0.1.23.
 > </details>
