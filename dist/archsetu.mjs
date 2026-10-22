@@ -2180,11 +2180,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @private
        */
       _parseCommand(operands, unknown) {
-        const parsed = this.parseOptions(unknown);
+        const parsed2 = this.parseOptions(unknown);
         this._parseOptionsEnv();
         this._parseOptionsImplied();
-        operands = operands.concat(parsed.operands);
-        unknown = parsed.unknown;
+        operands = operands.concat(parsed2.operands);
+        unknown = parsed2.unknown;
         this.args = operands.concat(unknown);
         if (operands && this._findCommand(operands[0])) {
           return this._dispatchSubcommand(operands[0], operands.slice(1), unknown);
@@ -2203,12 +2203,12 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this.commands.length && this.args.length === 0 && !this._actionHandler && !this._defaultCommandName) {
           this.help({ error: true });
         }
-        this._outputHelpIfRequested(parsed.unknown);
+        this._outputHelpIfRequested(parsed2.unknown);
         this._checkForMissingMandatoryOptions();
         this._checkForConflictingOptions();
         const checkForUnknownOptions = () => {
-          if (parsed.unknown.length > 0) {
-            this.unknownOption(parsed.unknown[0]);
+          if (parsed2.unknown.length > 0) {
+            this.unknownOption(parsed2.unknown[0]);
           }
         };
         const commandEvent = `command:${this.name()}`;
@@ -5672,6 +5672,1215 @@ var init_PythonParser = __esm({
   }
 });
 
+// packages/core/src/parser/JavaParser.ts
+import path4 from "path";
+function isIdentStart(c3) {
+  return c3 >= 97 && c3 <= 122 || c3 >= 65 && c3 <= 90 || c3 === 95 || c3 === 36 || c3 > 127 && c3 !== 65279 && c3 !== 160;
+}
+function isIdentPart(c3) {
+  return isIdentStart(c3) || c3 >= 48 && c3 <= 57;
+}
+function tokenize(src) {
+  const tx = [];
+  const kd = [];
+  const ln2 = [];
+  const n = src.length;
+  let line = 1;
+  let i = 0;
+  const push = (t2, k2, l3) => {
+    tx.push(t2);
+    kd.push(k2);
+    ln2.push(l3);
+  };
+  const newlinesIn = (from, to2) => {
+    let count2 = 0;
+    for (let k2 = from; k2 < to2; k2++) if (src.charCodeAt(k2) === 10) count2++;
+    return count2;
+  };
+  while (i < n) {
+    const c3 = src.charCodeAt(i);
+    if (c3 === 10) {
+      line++;
+      i++;
+      continue;
+    }
+    if (c3 === 32 || c3 === 9 || c3 === 13 || c3 === 12 || c3 === 65279 || c3 === 160) {
+      i++;
+      continue;
+    }
+    if (c3 === 47) {
+      const d2 = src.charCodeAt(i + 1);
+      if (d2 === 47) {
+        const eol = src.indexOf("\n", i);
+        i = eol === -1 ? n : eol;
+        continue;
+      }
+      if (d2 === 42) {
+        const close = src.indexOf("*/", i + 2);
+        const end = close === -1 ? n : close + 2;
+        line += newlinesIn(i, end);
+        i = end;
+        continue;
+      }
+    }
+    if (c3 === 34) {
+      if (src.charCodeAt(i + 1) === 34 && src.charCodeAt(i + 2) === 34) {
+        let j4 = i + 3;
+        while (j4 < n && !(src.charCodeAt(j4) === 34 && src.charCodeAt(j4 + 1) === 34 && src.charCodeAt(j4 + 2) === 34)) {
+          j4 += src.charCodeAt(j4) === 92 ? 2 : 1;
+        }
+        const end = Math.min(n, j4 + 3);
+        push('"', LIT, line);
+        line += newlinesIn(i, end);
+        i = end;
+        continue;
+      }
+      let j3 = i + 1;
+      while (j3 < n) {
+        const d2 = src.charCodeAt(j3);
+        if (d2 === 92) j3 += 2;
+        else if (d2 === 34 || d2 === 10) break;
+        else j3++;
+      }
+      push('"', LIT, line);
+      i = j3 < n && src.charCodeAt(j3) === 34 ? j3 + 1 : j3;
+      continue;
+    }
+    if (c3 === 39) {
+      let j3 = i + 1;
+      while (j3 < n) {
+        const d2 = src.charCodeAt(j3);
+        if (d2 === 92) j3 += 2;
+        else if (d2 === 39 || d2 === 10) break;
+        else j3++;
+      }
+      push("'", LIT, line);
+      i = j3 < n && src.charCodeAt(j3) === 39 ? j3 + 1 : j3;
+      continue;
+    }
+    if (isIdentStart(c3)) {
+      let j3 = i + 1;
+      while (j3 < n && isIdentPart(src.charCodeAt(j3))) j3++;
+      push(src.slice(i, j3), ID, line);
+      i = j3;
+      continue;
+    }
+    if (c3 >= 48 && c3 <= 57 || c3 === 46 && src.charCodeAt(i + 1) >= 48 && src.charCodeAt(i + 1) <= 57) {
+      let j3 = i + 1;
+      while (j3 < n && (isIdentPart(src.charCodeAt(j3)) || src.charCodeAt(j3) === 46)) j3++;
+      push(src.slice(i, j3), LIT, line);
+      i = j3;
+      continue;
+    }
+    if (c3 === 46 && src.charCodeAt(i + 1) === 46 && src.charCodeAt(i + 2) === 46) {
+      push("...", OP, line);
+      i += 3;
+      continue;
+    }
+    const two = src.slice(i, i + 2);
+    if (TWO_CHAR_OPS.has(two)) {
+      push(two, OP, line);
+      i += 2;
+      continue;
+    }
+    push(src[i], OP, line);
+    i++;
+  }
+  return { tx, kd, ln: ln2 };
+}
+function pairBrackets(tx) {
+  const match = new Int32Array(tx.length).fill(-1);
+  const stack = [];
+  const opener = { ")": "(", "]": "[", "}": "{" };
+  for (let i = 0; i < tx.length; i++) {
+    const t2 = tx[i];
+    if (t2 === "(" || t2 === "[" || t2 === "{") stack.push(i);
+    else if (t2 === ")" || t2 === "]" || t2 === "}") {
+      let s = stack.length - 1;
+      while (s >= 0 && tx[stack[s]] !== opener[t2]) s--;
+      if (s < 0) continue;
+      const open = stack[s];
+      stack.length = s;
+      match[open] = i;
+      match[i] = open;
+    }
+  }
+  return match;
+}
+function setFieldTypes(record2, scope) {
+  const fields = {};
+  for (const [name, type] of scope.fields) if (type) fields[name] = type;
+  if (Object.keys(fields).length > 0) record2.fields = fields;
+}
+function numberType(text) {
+  if (/^0[xXbB]/.test(text)) return /[lL]$/.test(text) ? "long" : "int";
+  if (/[lL]$/.test(text)) return "long";
+  if (/[fF]$/.test(text)) return "float";
+  if (/[dD]$|[.eE]/.test(text)) return "double";
+  return "int";
+}
+function isTypeName(segment) {
+  return /^[A-Z]/.test(segment) && !/^[A-Z0-9_]+$/.test(segment);
+}
+function lastSegment(typeName) {
+  return typeName.slice(typeName.lastIndexOf(".") + 1);
+}
+function dimsOnto(bound, written, base) {
+  return (bound ?? "Object") + written.slice(base.length);
+}
+function generateExplanation3(filePath, classes, functions) {
+  const base = path4.basename(filePath, ".java");
+  if (classes.length > 0) {
+    return `${base} contains the ${classes[0]?.name ?? base} class with ${functions.length} method${functions.length === 1 ? "" : "s"}.`;
+  }
+  return `${base} defines ${functions.length} Java method${functions.length === 1 ? "" : "s"}.`;
+}
+var ID, LIT, OP, TWO_CHAR_OPS, KEYWORDS, PRIMITIVES, MODIFIERS, NOT_CALLS, DECLARATION_FOLLOWERS, JavaParser;
+var init_JavaParser = __esm({
+  "packages/core/src/parser/JavaParser.ts"() {
+    "use strict";
+    ID = 0;
+    LIT = 1;
+    OP = 2;
+    TWO_CHAR_OPS = /* @__PURE__ */ new Set(["::", "->", "&&", "||", "==", "!=", "++", "--", "+=", "-=", "*=", "/=", "&=", "|=", "^=", "%="]);
+    KEYWORDS = /* @__PURE__ */ new Set([
+      "abstract",
+      "assert",
+      "boolean",
+      "break",
+      "byte",
+      "case",
+      "catch",
+      "char",
+      "class",
+      "const",
+      "continue",
+      "default",
+      "do",
+      "double",
+      "else",
+      "enum",
+      "extends",
+      "final",
+      "finally",
+      "float",
+      "for",
+      "goto",
+      "if",
+      "implements",
+      "import",
+      "instanceof",
+      "int",
+      "interface",
+      "long",
+      "native",
+      "new",
+      "package",
+      "private",
+      "protected",
+      "public",
+      "return",
+      "short",
+      "static",
+      "strictfp",
+      "super",
+      "switch",
+      "synchronized",
+      "this",
+      "throw",
+      "throws",
+      "transient",
+      "try",
+      "void",
+      "volatile",
+      "while",
+      "true",
+      "false",
+      "null"
+    ]);
+    PRIMITIVES = /* @__PURE__ */ new Set(["boolean", "byte", "char", "short", "int", "long", "float", "double", "void"]);
+    MODIFIERS = /* @__PURE__ */ new Set([
+      "public",
+      "protected",
+      "private",
+      "static",
+      "final",
+      "abstract",
+      "native",
+      "synchronized",
+      "transient",
+      "volatile",
+      "strictfp",
+      "default",
+      "sealed"
+    ]);
+    NOT_CALLS = /* @__PURE__ */ new Set(["if", "for", "while", "switch", "catch", "synchronized", "return", "throw", "try", "assert", "yield", "case", "else", "do", "new"]);
+    DECLARATION_FOLLOWERS = /* @__PURE__ */ new Set(["=", ";", ",", ":", ")", "[", "->", "when"]);
+    JavaParser = {
+      language: "java",
+      extensions: [".java"],
+      parseFile(content, filePath) {
+        const { tx, kd, ln: ln2 } = tokenize(content);
+        const n = tx.length;
+        const match = pairBrackets(tx);
+        const lineCount = content.split("\n").length;
+        const functions = [];
+        const classes = [];
+        const anonymousClasses = [];
+        const imports = [];
+        const exports = [];
+        const moduleLevelCalls = /* @__PURE__ */ new Set();
+        const staticImports = /* @__PURE__ */ new Map();
+        const staticWildcards = [];
+        let packageName;
+        let anonymousCount = 0;
+        const queue = [];
+        const endOf = (open) => match[open] >= 0 ? match[open] : n - 1;
+        const qualifiedName = (i2) => {
+          let text = tx[i2] ?? "";
+          let j3 = i2 + 1;
+          while (tx[j3] === "." && kd[j3 + 1] === ID) {
+            text += `.${tx[j3 + 1]}`;
+            j3 += 2;
+          }
+          return [text, j3];
+        };
+        const skipAnnotation = (i2) => {
+          let j3 = qualifiedName(i2 + 1)[1];
+          if (tx[j3] === "(") j3 = endOf(j3) + 1;
+          return j3;
+        };
+        const skipModifiers = (i2) => {
+          let j3 = i2;
+          let line = -1;
+          let isPublic = false;
+          let isPrivate = false;
+          let isStatic = false;
+          while (j3 < n) {
+            const t2 = tx[j3];
+            if (t2 === "@" && tx[j3 + 1] !== "interface") {
+              j3 = skipAnnotation(j3);
+              continue;
+            }
+            if (MODIFIERS.has(t2) && kd[j3] === ID) {
+              if (line < 0) line = ln2[j3];
+              if (t2 === "public") isPublic = true;
+              if (t2 === "private") isPrivate = true;
+              if (t2 === "static") isStatic = true;
+              j3++;
+              continue;
+            }
+            if (t2 === "non" && tx[j3 + 1] === "-" && tx[j3 + 2] === "sealed") {
+              if (line < 0) line = ln2[j3];
+              j3 += 3;
+              continue;
+            }
+            break;
+          }
+          return { end: j3, line: line < 0 ? ln2[j3] ?? 1 : line, isPublic, isPrivate, isStatic };
+        };
+        const skipTypeArgs = (i2) => {
+          let j3 = i2 + 1;
+          if (tx[j3] === ">") return j3 + 1;
+          for (; ; ) {
+            while (tx[j3] === "@") j3 = skipAnnotation(j3);
+            if (tx[j3] === "?") {
+              j3++;
+              if (tx[j3] === "extends" || tx[j3] === "super") {
+                const t2 = parseType(j3 + 1);
+                if (!t2) return -1;
+                j3 = t2.end;
+              }
+            } else {
+              const t2 = parseType(j3);
+              if (!t2) return -1;
+              j3 = t2.end;
+            }
+            while (tx[j3] === "&") {
+              const t2 = parseType(j3 + 1);
+              if (!t2) return -1;
+              j3 = t2.end;
+            }
+            if (tx[j3] === ",") {
+              j3++;
+              continue;
+            }
+            return tx[j3] === ">" ? j3 + 1 : -1;
+          }
+        };
+        function parseType(i2) {
+          let j3 = i2;
+          while (tx[j3] === "@") j3 = skipAnnotation(j3);
+          if (kd[j3] !== ID) return null;
+          const first = tx[j3];
+          if (KEYWORDS.has(first) && !PRIMITIVES.has(first)) return null;
+          let text = first;
+          j3++;
+          if (!PRIMITIVES.has(first)) {
+            if (tx[j3] === "<") {
+              const after = skipTypeArgs(j3);
+              if (after < 0) return null;
+              j3 = after;
+            }
+            for (; ; ) {
+              if (tx[j3] !== ".") break;
+              let k2 = j3 + 1;
+              while (tx[k2] === "@" && tx[k2 + 1] !== "interface") k2 = skipAnnotation(k2);
+              if (kd[k2] !== ID || KEYWORDS.has(tx[k2])) break;
+              text += `.${tx[k2]}`;
+              j3 = k2 + 1;
+              if (tx[j3] === "<") {
+                const after = skipTypeArgs(j3);
+                if (after < 0) return null;
+                j3 = after;
+              }
+            }
+          }
+          for (; ; ) {
+            while (tx[j3] === "@") j3 = skipAnnotation(j3);
+            if (tx[j3] === "[" && tx[j3 + 1] === "]") {
+              text += "[]";
+              j3 += 2;
+              continue;
+            }
+            break;
+          }
+          return { text, end: j3 };
+        }
+        const parseTypeParams = (i2) => {
+          const params = /* @__PURE__ */ new Map();
+          let j3 = i2 + 1;
+          while (j3 < n) {
+            while (tx[j3] === "@") j3 = skipAnnotation(j3);
+            if (kd[j3] !== ID) return null;
+            const name = tx[j3];
+            j3++;
+            let bound = null;
+            if (tx[j3] === "extends") {
+              const t2 = parseType(j3 + 1);
+              if (!t2) return null;
+              bound = t2.text;
+              j3 = t2.end;
+              while (tx[j3] === "&") {
+                const more = parseType(j3 + 1);
+                if (!more) return null;
+                j3 = more.end;
+              }
+            }
+            params.set(name, bound);
+            if (tx[j3] === ",") {
+              j3++;
+              continue;
+            }
+            if (tx[j3] === ">") return { params, end: j3 + 1 };
+            return null;
+          }
+          return null;
+        };
+        const parseTypeList = (i2, into) => {
+          let j3 = i2;
+          for (; ; ) {
+            const t2 = parseType(j3);
+            if (!t2) return j3;
+            into.push(t2.text);
+            j3 = t2.end;
+            if (tx[j3] !== ",") return j3;
+            j3++;
+          }
+        };
+        const resolveTypeVariable = (text, scope, methodTypeParams) => {
+          const base = text.replace(/(\[\])+$/, "");
+          if (methodTypeParams?.has(base)) return dimsOnto(methodTypeParams.get(base) ?? null, text, base);
+          for (let s = scope; s; s = s.outer) {
+            if (s.typeParams.has(base)) return dimsOnto(s.typeParams.get(base) ?? null, text, base);
+          }
+          return text;
+        };
+        const declaredReturnType = (written, scope, methodTypeParams) => {
+          const base = written.replace(/(\[\])+$/, "");
+          const dims = written.slice(base.length);
+          if (methodTypeParams?.has(base)) {
+            const bound = methodTypeParams.get(base);
+            return bound ? bound + dims : null;
+          }
+          for (let s = scope; s; s = s.outer) {
+            if (!s.typeParams.has(base)) continue;
+            const bound = s.typeParams.get(base);
+            if (!bound) return null;
+            return !dims && lastSegment(bound) === s.simpleName ? "<self>" : bound + dims;
+          }
+          return written;
+        };
+        const lookupVar = (body, name) => {
+          if (body.vars.has(name)) return { found: true, type: body.vars.get(name) ?? null };
+          for (let s = body.scope; s; s = s.outer) {
+            if (s.fields.has(name)) return { found: true, type: s.fields.get(name) ?? null };
+            for (const vars of s.enclosingVars ?? []) {
+              if (vars.has(name)) return { found: true, type: vars.get(name) ?? null };
+            }
+          }
+          return { found: false, type: null };
+        };
+        const scopePaths = (scope) => {
+          const paths = [];
+          for (let s = scope; s; s = s.outer) paths.push(s.path);
+          return paths;
+        };
+        const addSite = (body, site) => {
+          body.names.add(site.name);
+          if (!body.fn) return;
+          const key = `${site.kind}\0${site.name}\0${site.receivers?.join(",") ?? ""}\0${site.argTypes?.join(",") ?? site.args}`;
+          if (!body.sites.has(key)) body.sites.set(key, site);
+        };
+        const countArgs = (open) => {
+          const close = endOf(open);
+          if (close === open + 1) return 0;
+          let args = 1;
+          for (let j3 = open + 1; j3 < close; j3++) {
+            const t2 = tx[j3];
+            if (t2 === "(" || t2 === "[" || t2 === "{") j3 = endOf(j3);
+            else if (t2 === "<" && kd[j3 - 1] === ID) {
+              const after = skipTypeArgs(j3);
+              if (after > 0) j3 = after - 1;
+            } else if (t2 === ",") args++;
+          }
+          return args;
+        };
+        const argumentsOf = (body, open) => {
+          const close = endOf(open);
+          const types = [];
+          const calls = [];
+          if (close === open + 1) return { argTypes: types };
+          let start = open + 1;
+          for (let j3 = open + 1; j3 <= close; j3++) {
+            const t2 = tx[j3];
+            if (j3 === close || t2 === ",") {
+              const type = expressionType(body, start, j3);
+              types.push(type);
+              calls.push(type === null ? callExpression(body, start, j3) : null);
+              start = j3 + 1;
+            } else if (t2 === "(" || t2 === "[" || t2 === "{") j3 = endOf(j3);
+            else if (t2 === "<" && kd[j3 - 1] === ID) {
+              const after = skipTypeArgs(j3);
+              if (after > 0) j3 = after - 1;
+            }
+          }
+          return calls.some((c3) => c3 !== null) ? { argTypes: types, argCalls: calls } : { argTypes: types };
+        };
+        const callExpression = (body, from, to2) => {
+          if (tx[to2 - 1] !== ")") return null;
+          const open = match[to2 - 1];
+          const nameAt = open - 1;
+          const name = tx[nameAt];
+          if (open <= from || kd[nameAt] !== ID || !name || KEYWORDS.has(name) || tx[nameAt - 1] === "new") return null;
+          for (let j3 = from; j3 < nameAt; j3++) {
+            const u2 = tx[j3];
+            if (u2 === "(" || u2 === "[") j3 = endOf(j3);
+            else if (kd[j3] === OP && u2 !== "." && u2 !== "<" && u2 !== ">" && u2 !== "," && u2 !== "?") return null;
+          }
+          return { name, args: countArgs(open), ...argumentsOf(body, open), ...callReceiver(body, nameAt) };
+        };
+        const expressionType = (body, from, to2) => {
+          const t2 = tx[from];
+          if (to2 - from === 1) {
+            if (kd[from] === LIT) return t2 === '"' ? "String" : t2 === "'" ? "char" : numberType(t2);
+            if (t2 === "true" || t2 === "false") return "boolean";
+            if (t2 === "null") return "null";
+            if (t2 === "this") return body.scope.path;
+            if (kd[from] === ID) return lookupVar(body, t2).type;
+            return null;
+          }
+          if (t2 === "-" && to2 - from === 2 && kd[from + 1] === LIT) return numberType(tx[from + 1]);
+          if (kd[from] === ID && tx[from + 1] === "[" && endOf(from + 1) === to2 - 1) {
+            const array = lookupVar(body, t2).type;
+            return array?.endsWith("[]") ? array.slice(0, -2) : null;
+          }
+          if (to2 - from === 3 && tx[from + 1] === "." && kd[from + 2] === ID) {
+            if (t2 === "this") return receiverOfChain(body, ["this", tx[from + 2]]).receivers?.[0] ?? null;
+            if (tx[from + 2] === "length" && lookupVar(body, t2).type?.endsWith("[]")) return "int";
+          }
+          let operators = false;
+          let strings = false;
+          for (let j3 = from; j3 < to2; j3++) {
+            const u2 = tx[j3];
+            if (u2 === "(" || u2 === "[" || u2 === "{") j3 = endOf(j3);
+            else if (u2 === "->" || u2 === "::") return "->";
+            else if (u2 === '"' && kd[j3] === LIT) strings = true;
+            else if (kd[j3] === OP && u2 !== "." && u2 !== "<" && u2 !== ">") operators = true;
+          }
+          if (operators) return strings && tx.slice(from, to2).includes("+") ? "String" : null;
+          if (t2 === "new") {
+            const type = parseType(from + 1);
+            if (!type) return null;
+            if (tx[type.end] === "(" && endOf(type.end) === to2 - 1) return type.text;
+            if (tx[type.end] === "{") return type.text;
+            if (tx[type.end] === "[") {
+              let dims = "";
+              for (let j3 = type.end; tx[j3] === "["; j3 = endOf(j3) + 1) dims += "[]";
+              return type.text + dims;
+            }
+            return null;
+          }
+          if (t2 === "(") {
+            const cast = parseType(from + 1);
+            if (cast && tx[cast.end] === ")" && cast.end + 1 < to2) return resolveTypeVariable(cast.text, body.scope, body.typeParams);
+          }
+          return null;
+        };
+        const callReceiver = (body, nameAt) => {
+          let dot = nameAt - 1;
+          if (tx[dot] === ">") dot = typeArgsStart(dot) - 1;
+          if (tx[dot] === ".") return receiverOf(body, dot);
+          const receivers = scopePaths(body.scope);
+          receivers.push(...staticImports.get(tx[nameAt]) ?? staticWildcards);
+          return { kind: "member", receivers };
+        };
+        const receiverOf = (body, dot) => {
+          const unknown = { kind: "unknown" };
+          const e = dot - 1;
+          const t2 = tx[e];
+          if (kd[e] === LIT) return t2 === '"' ? { kind: "member", receivers: ["String"] } : unknown;
+          if (t2 === ")") {
+            const open = match[e];
+            if (open < 0) return unknown;
+            const created = creationTypeBefore(open);
+            if (created) return { kind: "member", receivers: [created] };
+            if (tx[open + 1] === "(") {
+              const cast = parseType(open + 2);
+              if (cast && tx[cast.end] === ")") {
+                const type = resolveTypeVariable(cast.text, body.scope, body.typeParams);
+                return type ? { kind: "member", receivers: [type] } : unknown;
+              }
+            }
+            const name = tx[open - 1];
+            if (kd[open - 1] === ID && name && !KEYWORDS.has(name)) {
+              return { kind: "member", receiverCall: { name, args: countArgs(open), ...argumentsOf(body, open), ...callReceiver(body, open - 1) } };
+            }
+            return unknown;
+          }
+          if (t2 === "]") {
+            const open = match[e];
+            if (open > 0 && kd[open - 1] === ID && tx[open - 2] !== ".") {
+              const v2 = lookupVar(body, tx[open - 1]);
+              if (v2.type?.endsWith("[]")) return { kind: "member", receivers: [v2.type.slice(0, -2)] };
+            }
+            return unknown;
+          }
+          if (kd[e] !== ID) return unknown;
+          let s = e;
+          const chain = [tx[e]];
+          while (tx[s - 1] === "." && kd[s - 2] === ID) {
+            s -= 2;
+            chain.unshift(tx[s]);
+          }
+          if (tx[s - 1] === "." || tx[s - 1] === "::") return unknown;
+          return receiverOfChain(body, chain);
+        };
+        const receiverOfChain = (body, chain) => {
+          const unknown = { kind: "unknown" };
+          const [head, ...rest] = chain;
+          if (!head) return unknown;
+          if (head === "this") {
+            if (rest.length === 0) return { kind: "member", receivers: [body.scope.path] };
+            if (rest.length === 1) {
+              for (let s = body.scope; s; s = s.outer) {
+                if (s.fields.has(rest[0])) {
+                  const type = s.fields.get(rest[0]) ?? null;
+                  return type ? { kind: "member", receivers: [type] } : unknown;
+                }
+              }
+              return { kind: "unknown", field: rest[0] };
+            }
+            return unknown;
+          }
+          if (head === "super") return rest.length === 0 ? { kind: "super", receivers: [body.scope.path] } : unknown;
+          if (rest.length > 0 && rest[rest.length - 1] === "this") return { kind: "member", receivers: [chain.slice(0, -1).join(".")] };
+          if (rest.length > 0 && rest[rest.length - 1] === "super") return { kind: "super", receivers: [chain.slice(0, -1).join(".")] };
+          const v2 = lookupVar(body, head);
+          if (v2.found) {
+            if (rest.length === 0) return v2.type ? { kind: "member", receivers: [v2.type] } : unknown;
+            if (!v2.type) return unknown;
+            return rest.length === 1 ? { kind: "unknown", via: v2.type, field: rest[0] } : { kind: "unknown", via: v2.type };
+          }
+          if (/^[a-z_$]/.test(head)) return rest.length === 0 ? { kind: "unknown", field: head } : unknown;
+          const firstType = chain.findIndex((seg) => /^[A-Z]/.test(seg));
+          if (firstType < 0) return unknown;
+          let last = firstType;
+          while (last + 1 < chain.length && isTypeName(chain[last + 1])) last++;
+          if (last === chain.length - 2) return { kind: "unknown", via: chain.slice(0, last + 1).join("."), field: chain[last + 1] };
+          if (last !== chain.length - 1) return { kind: "unknown", via: chain.slice(0, last + 1).join(".") };
+          if (chain.length > 1 && !isTypeName(chain[last])) return unknown;
+          return { kind: "static", receivers: [chain.join(".")] };
+        };
+        function creationTypeBefore(open) {
+          let j3 = open - 1;
+          if (tx[j3] === ">") {
+            let depth = 0;
+            for (; j3 >= 0; j3--) {
+              if (tx[j3] === ">") depth++;
+              else if (tx[j3] === "<" && --depth === 0) break;
+            }
+            j3--;
+          }
+          const end = j3;
+          while (kd[j3] === ID && tx[j3 - 1] === "." && kd[j3 - 2] === ID) j3 -= 2;
+          if (kd[j3] !== ID || tx[j3 - 1] !== "new") return null;
+          const parts = [];
+          for (let k2 = j3; k2 <= end; k2++) if (kd[k2] === ID) parts.push(tx[k2]);
+          return parts.join(".");
+        }
+        const collectDeclarations = (body, from, to2) => {
+          for (let k2 = from; k2 < to2; k2++) {
+            const nested = nestedClassBodyAt(k2);
+            if (nested >= 0) {
+              k2 = endOf(nested);
+              continue;
+            }
+            const t2 = tx[k2];
+            if (t2 === "->") {
+              if (kd[k2 - 1] === ID && !body.vars.has(tx[k2 - 1])) body.vars.set(tx[k2 - 1], null);
+              else if (tx[k2 - 1] === ")") {
+                const open = match[k2 - 1];
+                for (let j3 = open + 1; j3 > 0 && j3 < k2 - 1; j3++) {
+                  if (kd[j3] === ID && (tx[j3 + 1] === "," || tx[j3 + 1] === ")") && (tx[j3 - 1] === "(" || tx[j3 - 1] === ",") && !body.vars.has(tx[j3])) {
+                    body.vars.set(tx[j3], null);
+                  }
+                }
+              }
+              continue;
+            }
+            if (kd[k2] !== ID || tx[k2 - 1] === "." || t2 === "yield" || KEYWORDS.has(t2) && !PRIMITIVES.has(t2)) continue;
+            const type = parseType(k2);
+            if (!type) continue;
+            const nameAt = type.end;
+            if (kd[nameAt] !== ID || KEYWORDS.has(tx[nameAt])) continue;
+            if (!DECLARATION_FOLLOWERS.has(tx[nameAt + 1]) && tx[k2 - 1] !== "instanceof") continue;
+            if (tx[nameAt + 1] === "(" || type.text === "yield") continue;
+            const name = tx[nameAt];
+            if (body.vars.has(name)) continue;
+            let declared = type.text;
+            if (declared === "var") declared = initializerType(nameAt + 1);
+            body.vars.set(name, declared === null ? null : resolveTypeVariable(declared, body.scope, body.typeParams));
+            k2 = nameAt;
+          }
+        };
+        const initializerType = (at3) => {
+          if (tx[at3] !== "=") return null;
+          if (tx[at3 + 1] === "new") {
+            const t2 = parseType(at3 + 2);
+            return t2 && tx[t2.end] === "(" ? t2.text : null;
+          }
+          if (tx[at3 + 1] === "(") {
+            const t2 = parseType(at3 + 2);
+            return t2 && tx[t2.end] === ")" ? t2.text : null;
+          }
+          return null;
+        };
+        function nestedClassBodyAt(k2) {
+          const t2 = tx[k2];
+          if (t2 === "new") {
+            const type = parseType(k2 + 1);
+            if (!type || tx[type.end] !== "(") return -1;
+            const after = endOf(type.end) + 1;
+            return tx[after] === "{" ? after : -1;
+          }
+          if (isTypeDeclarationAt(k2)) {
+            for (let j3 = k2 + 1; j3 < n; j3++) {
+              if (tx[j3] === "{") return j3;
+              if (tx[j3] === ";" || tx[j3] === "}") return -1;
+              if (tx[j3] === "(") j3 = endOf(j3);
+            }
+          }
+          return -1;
+        }
+        function isTypeDeclarationAt(k2) {
+          const t2 = tx[k2];
+          if (kd[k2] !== ID || tx[k2 - 1] === "." || tx[k2 - 1] === "::") return false;
+          if (t2 === "class" || t2 === "interface" || t2 === "enum") return kd[k2 + 1] === ID;
+          if (t2 === "record") return kd[k2 + 1] === ID && (tx[k2 + 2] === "(" || tx[k2 + 2] === "<");
+          return false;
+        }
+        const scanCode = (body, from, to2) => {
+          const anonymousBodies = /* @__PURE__ */ new Map();
+          for (let k2 = from; k2 < to2; k2++) {
+            const t2 = tx[k2];
+            const superType = anonymousBodies.get(k2);
+            if (superType !== void 0) {
+              k2 = parseAnonymousClass(k2, superType, body);
+              continue;
+            }
+            if (kd[k2] === ID && isTypeDeclarationAt(k2)) {
+              const end = parseTypeDeclaration(k2, { end: k2, line: ln2[k2], isPublic: false, isPrivate: false, isStatic: false }, body.scope, [body.vars, ...body.scope.enclosingVars ?? []], true);
+              k2 = end - 1;
+              continue;
+            }
+            switch (t2) {
+              case "if":
+              case "for":
+              case "while":
+              case "catch":
+                if (kd[k2] === ID) body.complexity++;
+                break;
+              case "case":
+                if (kd[k2] === ID) body.complexity += caseLabels(k2);
+                break;
+              case "&&":
+              case "||":
+                body.complexity++;
+                break;
+              case "?":
+                if (tx[k2 - 1] !== "<" && tx[k2 - 1] !== ",") body.complexity++;
+                break;
+            }
+            if (t2 === "new" && kd[k2] === ID) {
+              let j3 = k2 + 1;
+              while (tx[j3] === "@") j3 = skipAnnotation(j3);
+              const type = parseType(j3);
+              if (!type || tx[type.end] !== "(") continue;
+              const typeName = type.text;
+              addSite(body, { name: lastSegment(typeName), args: countArgs(type.end), ...argumentsOf(body, type.end), kind: "new", receivers: [typeName] });
+              const after = endOf(type.end) + 1;
+              if (tx[after] === "{") anonymousBodies.set(after, typeName);
+              k2 = type.end - 1;
+              continue;
+            }
+            if (t2 === "::") {
+              const name = tx[k2 + 1];
+              if (!name || kd[k2 + 1] !== ID) continue;
+              let receiver = { kind: "unknown" };
+              if (tx[k2 - 1] === "]" || tx[k2 - 1] === ">") {
+                let j3 = k2 - 1;
+                while (j3 > 0 && (tx[j3] === "]" || tx[j3] === "[" || tx[j3] === ">")) j3 = tx[j3] === ">" ? typeArgsStart(j3) - 1 : j3 - 1;
+                if (kd[j3] === ID) receiver = { kind: "static", receivers: [qualifiedBefore(j3)] };
+              } else {
+                receiver = receiverOf(body, k2);
+              }
+              if (name === "new") {
+                const typeName = receiver.receivers?.[0];
+                if (typeName && !typeName.endsWith("[]")) addSite(body, { name: lastSegment(typeName), args: -1, kind: "new", receivers: [typeName] });
+              } else {
+                addSite(body, { name, args: -1, ...receiver, kind: receiver.kind === "static" ? "member" : receiver.kind });
+              }
+              k2++;
+              continue;
+            }
+            if (kd[k2] !== ID || tx[k2 + 1] !== "(" || tx[k2 - 1] === "@" || tx[k2 - 1] === "::") continue;
+            if (NOT_CALLS.has(t2) || KEYWORDS.has(t2) && t2 !== "this" && t2 !== "super") continue;
+            const args = countArgs(k2 + 1);
+            const argTypes = argumentsOf(body, k2 + 1);
+            if (t2 === "this" || t2 === "super") {
+              if (tx[k2 - 1] === ".") continue;
+              if (t2 === "this" && body.scope.simpleName) {
+                addSite(body, { name: body.scope.simpleName, args, ...argTypes, kind: "new", receivers: [body.scope.path] });
+              } else if (t2 === "super" && body.scope.superclass) {
+                addSite(body, { name: lastSegment(body.scope.superclass), args, ...argTypes, kind: "new", receivers: [body.scope.superclass] });
+              }
+              continue;
+            }
+            addSite(body, { name: t2, args, ...argTypes, ...callReceiver(body, k2) });
+          }
+        };
+        function caseLabels(k2) {
+          let labels = 1;
+          for (let j3 = k2 + 1; j3 < n && tx[j3] !== "->" && tx[j3] !== ":" && tx[j3] !== "{" && tx[j3] !== ";"; j3++) {
+            if (tx[j3] === "(" || tx[j3] === "[") j3 = endOf(j3);
+            else if (tx[j3] === ",") labels++;
+            else if (tx[j3] === "default") labels--;
+          }
+          return Math.max(labels, 0);
+        }
+        function typeArgsStart(gt2) {
+          let depth = 0;
+          for (let j3 = gt2; j3 >= 0; j3--) {
+            if (tx[j3] === ">") depth++;
+            else if (tx[j3] === "<" && --depth === 0) return j3;
+          }
+          return gt2;
+        }
+        function qualifiedBefore(j3) {
+          let s = j3;
+          while (tx[s - 1] === "." && kd[s - 2] === ID) s -= 2;
+          return qualifiedName(s)[0];
+        }
+        const finishBody = (body) => {
+          if (!body.fn) {
+            for (const name of body.names) moduleLevelCalls.add(name);
+            return;
+          }
+          body.fn.calls = [...body.names].filter((name) => name !== body.fn.name);
+          body.fn.callSites = [...body.sites.values()];
+          body.fn.complexity = body.complexity;
+        };
+        function parseTypeDeclaration(i2, mods, outer, enclosingVars, isLocal = false) {
+          let kind;
+          let j3 = i2;
+          if (tx[j3] === "@") {
+            kind = "annotation";
+            j3 += 2;
+          } else {
+            kind = tx[j3];
+            j3++;
+          }
+          if (kd[j3] !== ID) return j3;
+          const name = tx[j3];
+          j3++;
+          const scope = {
+            path: outer ? `${outer.path}.${name}` : name,
+            simpleName: name,
+            kind,
+            fields: /* @__PURE__ */ new Map(),
+            typeParams: /* @__PURE__ */ new Map(),
+            outer,
+            enclosingVars: isLocal ? enclosingVars : outer?.enclosingVars
+          };
+          if (tx[j3] === "<") {
+            const tp = parseTypeParams(j3);
+            if (tp) {
+              scope.typeParams = tp.params;
+              j3 = tp.end;
+            }
+          }
+          let components = [];
+          if (kind === "record" && tx[j3] === "(") {
+            components = parseParams31(j3, scope);
+            for (const c3 of components) scope.fields.set(c3.name, c3.type);
+            j3 = endOf(j3) + 1;
+          }
+          const extendsList = [];
+          const implementsList = [];
+          while (j3 < n && tx[j3] !== "{" && tx[j3] !== ";" && tx[j3] !== "}") {
+            if (tx[j3] === "extends") j3 = parseTypeList(j3 + 1, extendsList);
+            else if (tx[j3] === "implements") j3 = parseTypeList(j3 + 1, implementsList);
+            else if (tx[j3] === "permits") j3 = parseTypeList(j3 + 1, []);
+            else j3++;
+          }
+          if (tx[j3] !== "{") return j3 + 1;
+          const open = j3;
+          const close = endOf(open);
+          if (kind === "class") scope.superclass = extendsList[0];
+          const supertypes = kind === "interface" ? extendsList : implementsList;
+          const record2 = {
+            name,
+            filePath,
+            startLine: mods.line,
+            endLine: ln2[close],
+            methods: [],
+            ...kind === "class" && extendsList[0] ? { extends: extendsList[0] } : {},
+            implements: supertypes,
+            isExported: mods.isPublic,
+            path: scope.path,
+            kind
+          };
+          classes.push(record2);
+          if (mods.isPublic) exports.push(name);
+          parseClassBody(open, close, scope, components);
+          setFieldTypes(record2, scope);
+          return close + 1;
+        }
+        function parseAnonymousClass(open, superType, body) {
+          const close = endOf(open);
+          const scope = {
+            path: `${body.scope.path}.$${++anonymousCount}`,
+            simpleName: "",
+            kind: "class",
+            fields: /* @__PURE__ */ new Map(),
+            typeParams: /* @__PURE__ */ new Map(),
+            outer: body.scope,
+            enclosingVars: [body.vars, ...body.scope.enclosingVars ?? []],
+            superclass: superType
+          };
+          const record2 = {
+            name: lastSegment(superType),
+            filePath,
+            startLine: ln2[open],
+            endLine: ln2[close],
+            methods: [],
+            extends: superType,
+            isExported: false,
+            path: scope.path,
+            kind: "class"
+          };
+          anonymousClasses.push(record2);
+          parseClassBody(open, close, scope, [], body);
+          setFieldTypes(record2, scope);
+          return close;
+        }
+        function parseClassBody(open, close, scope, components, initializerOf) {
+          const initializerBody = () => initializerOf ?? { fn: null, scope, vars: /* @__PURE__ */ new Map(), sites: /* @__PURE__ */ new Map(), names: /* @__PURE__ */ new Set(), complexity: 0 };
+          let i2 = open + 1;
+          if (scope.kind === "enum") i2 = parseEnumConstants(i2, close, scope, initializerBody);
+          while (i2 < close) {
+            if (tx[i2] === ";") {
+              i2++;
+              continue;
+            }
+            const mods = skipModifiers(i2);
+            let j3 = mods.end;
+            if (tx[j3] === "{") {
+              const end = endOf(j3);
+              const from = j3 + 1;
+              queue.push(() => {
+                const b3 = initializerBody();
+                const blockBody = { ...b3, scope, vars: new Map(b3.vars) };
+                collectDeclarations(blockBody, from, end);
+                scanCode(blockBody, from, end);
+                finishBody(b3);
+              });
+              i2 = end + 1;
+              continue;
+            }
+            if (isTypeDeclarationAt(j3) || tx[j3] === "@" && tx[j3 + 1] === "interface") {
+              i2 = parseTypeDeclaration(j3, mods, scope);
+              continue;
+            }
+            let typeParams;
+            if (tx[j3] === "<") {
+              const tp = parseTypeParams(j3);
+              if (tp) {
+                typeParams = tp.params;
+                j3 = tp.end;
+              }
+            }
+            if (kd[j3] === ID && tx[j3] === scope.simpleName && tx[j3 + 1] === "(") {
+              i2 = parseMethod(j3, mods, scope, typeParams, true);
+              continue;
+            }
+            if (scope.kind === "record" && tx[j3] === scope.simpleName && tx[j3 + 1] === "{") {
+              i2 = parseMethodBody(j3, j3 + 1, mods, scope, typeParams, true, components);
+              continue;
+            }
+            const type = parseType(j3);
+            if (type && kd[type.end] === ID && !KEYWORDS.has(tx[type.end])) {
+              if (tx[type.end + 1] === "(") {
+                i2 = parseMethod(type.end, mods, scope, typeParams, false, type.text);
+                continue;
+              }
+              i2 = parseFields(type.end, type.text, scope, close, initializerBody);
+              continue;
+            }
+            i2 = skipMember(i2, close);
+          }
+        }
+        function parseEnumConstants(from, close, scope, initializerBody) {
+          let i2 = from;
+          while (i2 < close) {
+            while (tx[i2] === "@") i2 = skipAnnotation(i2);
+            if (tx[i2] === ";") return i2 + 1;
+            if (kd[i2] !== ID || tx[i2] === "}") return i2;
+            scope.fields.set(tx[i2], scope.path);
+            i2++;
+            if (tx[i2] === "(") {
+              const end = endOf(i2);
+              const from2 = i2 + 1;
+              queue.push(() => {
+                const b3 = initializerBody();
+                scanCode(b3, from2, end);
+                finishBody(b3);
+              });
+              i2 = end + 1;
+            }
+            if (tx[i2] === "{") {
+              const enumBody = { fn: null, scope, vars: /* @__PURE__ */ new Map(), sites: /* @__PURE__ */ new Map(), names: /* @__PURE__ */ new Set(), complexity: 0 };
+              i2 = parseAnonymousClass(i2, scope.path, enumBody) + 1;
+              finishBody(enumBody);
+            }
+            if (tx[i2] === ",") {
+              i2++;
+              continue;
+            }
+            if (tx[i2] === ";") return i2 + 1;
+            return i2;
+          }
+          return i2;
+        }
+        function skipMember(i2, close) {
+          for (let j3 = i2; j3 < close; j3++) {
+            const t2 = tx[j3];
+            if (t2 === ";") return j3 + 1;
+            if (t2 === "{") return endOf(j3) + 1;
+            if (t2 === "(" || t2 === "[") j3 = endOf(j3);
+          }
+          return Math.max(i2 + 1, close);
+        }
+        function parseFields(nameAt, type, scope, close, initializerBody) {
+          let j3 = nameAt;
+          for (; ; ) {
+            if (kd[j3] !== ID) return skipMember(j3, close);
+            let declared = type;
+            const name = tx[j3];
+            j3++;
+            while (tx[j3] === "[" && tx[j3 + 1] === "]") {
+              declared += "[]";
+              j3 += 2;
+            }
+            scope.fields.set(name, resolveTypeVariable(declared, scope));
+            if (tx[j3] === "=") {
+              const from = j3 + 1;
+              let k2 = from;
+              while (k2 < close && tx[k2] !== "," && tx[k2] !== ";") k2 = tx[k2] === "(" || tx[k2] === "[" || tx[k2] === "{" ? endOf(k2) + 1 : k2 + 1;
+              const to2 = k2;
+              queue.push(() => {
+                const b3 = initializerBody();
+                const fieldBody = { ...b3, scope };
+                collectDeclarations(fieldBody, from, to2);
+                scanCode(fieldBody, from, to2);
+                finishBody(b3);
+              });
+              j3 = to2;
+            }
+            if (tx[j3] === ",") {
+              j3++;
+              continue;
+            }
+            return tx[j3] === ";" ? j3 + 1 : skipMember(j3, close);
+          }
+        }
+        function parseParams31(open, scope, typeParams) {
+          const close = endOf(open);
+          const params = [];
+          let j3 = open + 1;
+          while (j3 < close) {
+            while (tx[j3] === "@" || tx[j3] === "final") j3 = tx[j3] === "@" ? skipAnnotation(j3) : j3 + 1;
+            const type = parseType(j3);
+            if (!type) break;
+            j3 = type.end;
+            let variadic = false;
+            let text = type.text;
+            if (tx[j3] === "...") {
+              variadic = true;
+              text += "[]";
+              j3++;
+            }
+            if (kd[j3] !== ID) break;
+            const name = tx[j3];
+            j3++;
+            while (tx[j3] === "[" && tx[j3 + 1] === "]") {
+              text += "[]";
+              j3 += 2;
+            }
+            if (name !== "this") params.push({ name, type: resolveTypeVariable(text, scope, typeParams), variadic });
+            while (j3 < close && tx[j3] !== ",") j3 = tx[j3] === "(" || tx[j3] === "[" || tx[j3] === "{" ? endOf(j3) + 1 : j3 + 1;
+            j3++;
+          }
+          return params;
+        }
+        function parseMethod(nameAt, mods, scope, typeParams, isConstructor, returnType) {
+          const open = nameAt + 1;
+          const params = parseParams31(open, scope, typeParams);
+          let j3 = endOf(open) + 1;
+          while (tx[j3] === "[" && tx[j3 + 1] === "]") j3 += 2;
+          if (tx[j3] === "throws") {
+            const thrown = [];
+            j3 = parseTypeList(j3 + 1, thrown);
+          }
+          if (tx[j3] === "default") {
+            while (j3 < n && tx[j3] !== ";" && tx[j3] !== "}") j3 = tx[j3] === "(" || tx[j3] === "{" || tx[j3] === "[" ? endOf(j3) + 1 : j3 + 1;
+          }
+          if (tx[j3] === "{") return parseMethodBody(nameAt, j3, mods, scope, typeParams, isConstructor, params, returnType);
+          return tx[j3] === ";" ? j3 + 1 : j3;
+        }
+        function parseMethodBody(nameAt, open, mods, scope, typeParams, isConstructor, params, returnType) {
+          const close = endOf(open);
+          const startLine = Math.min(mods.line, ln2[nameAt]);
+          const fn2 = {
+            name: tx[nameAt],
+            filePath,
+            startLine,
+            endLine: ln2[close],
+            parameters: params.map((p2) => p2.name),
+            // Interface members are public unless declared private (JLS 9.4).
+            isExported: mods.isPublic || (scope.kind === "interface" || scope.kind === "annotation") && !mods.isPrivate,
+            isAsync: false,
+            // Java doesn't have async keyword (CompletableFuture etc. is different)
+            calls: [],
+            complexity: 1,
+            lineCount: ln2[close] - startLine + 1,
+            language: "java",
+            className: scope.path,
+            isConstructor,
+            isVariadic: params[params.length - 1]?.variadic ?? false,
+            parameterTypes: params.map((p2) => p2.type),
+            ...returnType !== void 0 ? { returnType: declaredReturnType(returnType, scope, typeParams) } : {}
+          };
+          functions.push(fn2);
+          const vars = /* @__PURE__ */ new Map();
+          for (const p2 of params) vars.set(p2.name, p2.type);
+          queue.push(() => {
+            const body = { fn: fn2, scope, vars, typeParams, sites: /* @__PURE__ */ new Map(), names: /* @__PURE__ */ new Set(), complexity: 1 };
+            collectDeclarations(body, open + 1, close);
+            scanCode(body, open + 1, close);
+            finishBody(body);
+          });
+          return close + 1;
+        }
+        let i = 0;
+        while (i < n) {
+          const t2 = tx[i];
+          if (t2 === "package" && kd[i] === ID) {
+            const [name, after] = qualifiedName(i + 1);
+            packageName = name;
+            i = after;
+            continue;
+          }
+          if (t2 === "import" && kd[i] === ID) {
+            let j4 = i + 1;
+            const isStatic = tx[j4] === "static";
+            if (isStatic) j4++;
+            if (tx[j4] === "module" && kd[j4 + 1] === ID) {
+              i = j4 + 2;
+              continue;
+            }
+            let [name, after] = qualifiedName(j4);
+            if (tx[after] === "." && tx[after + 1] === "*") {
+              if (isStatic) staticWildcards.push(name);
+              name += ".*";
+              after += 2;
+            } else if (isStatic) {
+              const dot = name.lastIndexOf(".");
+              const member = name.slice(dot + 1);
+              const list = staticImports.get(member) ?? [];
+              list.push(name.slice(0, dot));
+              staticImports.set(member, list);
+            }
+            imports.push({ source: name, symbols: [name.split(".").pop() ?? name], isRelative: false });
+            i = after;
+            continue;
+          }
+          if (t2 === ";") {
+            i++;
+            continue;
+          }
+          const mods = skipModifiers(i);
+          const j3 = mods.end;
+          if (isTypeDeclarationAt(j3) || tx[j3] === "@" && tx[j3 + 1] === "interface") {
+            i = parseTypeDeclaration(j3, mods, void 0);
+            continue;
+          }
+          i = Math.max(i + 1, j3 + 1);
+        }
+        for (let q3 = 0; q3 < queue.length; q3++) queue[q3]();
+        functions.sort((a, b3) => a.startLine - b3.startLine);
+        classes.sort((a, b3) => a.startLine - b3.startLine);
+        const avgComplexity = functions.length > 0 ? functions.reduce((s, f3) => s + f3.complexity, 0) / functions.length : 1;
+        return {
+          filePath,
+          language: "java",
+          functions,
+          classes,
+          imports,
+          exports,
+          lineCount,
+          complexity: Math.round(avgComplexity * 100) / 100,
+          explanation: generateExplanation3(filePath, classes, functions),
+          ...moduleLevelCalls.size > 0 ? { moduleLevelCalls: [...moduleLevelCalls] } : {},
+          ...packageName ? { packageName } : {},
+          ...anonymousClasses.length > 0 ? { anonymousClasses } : {}
+        };
+      }
+    };
+  }
+});
+
 // packages/core/src/parser/LexicalSyntax.ts
 function referenceFamily(language) {
   return REFERENCE_FAMILY[language] ?? language;
@@ -6018,157 +7227,18 @@ var init_LexicalSyntax = __esm({
   }
 });
 
-// packages/core/src/parser/JavaParser.ts
-import path4 from "path";
+// packages/core/src/parser/GoParser.ts
+import path5 from "path";
 function linesBefore3(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
 function parseParams3(raw) {
   return raw.split(",").map((p2) => {
     const parts = p2.trim().split(/\s+/);
-    return parts[parts.length - 1]?.replace(/[[\]]/g, "") ?? "";
-  }).filter(Boolean);
-}
-function extractCalls3(body, selfName) {
-  const calls = /* @__PURE__ */ new Set();
-  const code = blankCommentsAndStrings(body, LEXICAL_SYNTAX.java);
-  const SKIP = /* @__PURE__ */ new Set(["if", "for", "while", "switch", "catch", "new", "return", "throw", "synchronized", selfName]);
-  for (const m2 of code.matchAll(new RegExp(FUNC_CALL3.source, "g"))) {
-    const n = m2[1];
-    if (n && !SKIP.has(n) && /^[a-z]/.test(n)) calls.add(n);
-  }
-  for (const m2 of code.matchAll(CONSTRUCTOR_CALL)) if (m2[1] && m2[1] !== selfName) calls.add(m2[1]);
-  for (const m2 of code.matchAll(METHOD_REFERENCE)) {
-    const target = m2[1] === "new" ? code.slice(0, m2.index).match(/([\w$]+)\s*$/)?.[1] : m2[1];
-    if (target && target !== selfName) calls.add(target);
-  }
-  return Array.from(calls);
-}
-function generateExplanation3(filePath, classes, functions) {
-  const base = path4.basename(filePath, ".java");
-  if (classes.length > 0) {
-    return `${base} contains the ${classes[0]?.name ?? base} class with ${functions.length} method${functions.length === 1 ? "" : "s"}.`;
-  }
-  return `${base} defines ${functions.length} Java method${functions.length === 1 ? "" : "s"}.`;
-}
-var METHOD_DEF, STATEMENT_KEYWORDS, CONSTRUCTOR_DEF, CLASS_DEF2, IMPORT_STMT3, FUNC_CALL3, JavaParser, CONSTRUCTOR_CALL, METHOD_REFERENCE;
-var init_JavaParser = __esm({
-  "packages/core/src/parser/JavaParser.ts"() {
-    "use strict";
-    init_BaseParser();
-    init_LexicalSyntax();
-    METHOD_DEF = /^[ \t]*(?:@[\w.]+(?:\([^)]*\))?[ \t]+)*(?:(?:public|private|protected|static|final|abstract|synchronized|native|default|strictfp)[ \t]+)*(?:<[^>]+>\s+)?([\w$][\w$[\]<>.,? ]*?)[ \t]+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)[ \t]*\(([^)]*)\)\s*(?:throws\s+[\w,\s.]+)?\s*\{/gm;
-    STATEMENT_KEYWORDS = /* @__PURE__ */ new Set([
-      "if",
-      "else",
-      "for",
-      "while",
-      "do",
-      "switch",
-      "case",
-      "catch",
-      "try",
-      "finally",
-      "synchronized",
-      "return",
-      "new",
-      "throw",
-      "yield",
-      "assert"
-    ]);
-    CONSTRUCTOR_DEF = /^[ \t]*(?:@[\w.]+(?:\([^)]*\))?[ \t]+)*(?:(?:public|private|protected)[ \t]+)?([\w$]+)[ \t]*\(([^)]*)\)\s*(?:throws\s+[\w,\s.]+)?\s*\{/gm;
-    CLASS_DEF2 = /^[ \t]*(?:(?:public|private|protected|abstract|final|static)\s+)*(?:class|interface|enum|record)\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)(?:\s+extends\s+([\w<>., ]+))?(?:\s+implements\s+([\w<>., ]+))?\s*\{/gm;
-    IMPORT_STMT3 = /^import\s+(?:static\s+)?([\w.]+(?:\.\*)?)\s*;/gm;
-    FUNC_CALL3 = /\b([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)\s*\(/g;
-    JavaParser = {
-      language: "java",
-      extensions: [".java"],
-      parseFile(content, filePath) {
-        const lines = content.split("\n");
-        const lineCount = lines.length;
-        const functions = [];
-        const classes = [];
-        const imports = [];
-        const exports = [];
-        let m2;
-        const importPattern = new RegExp(IMPORT_STMT3.source, "gm");
-        while ((m2 = importPattern.exec(content)) !== null) {
-          const src = m2[1] ?? "";
-          imports.push({ source: src, symbols: [src.split(".").pop() ?? src], isRelative: false });
-        }
-        const classPattern = new RegExp(CLASS_DEF2.source, "gm");
-        while ((m2 = classPattern.exec(content)) !== null) {
-          const className = m2[1];
-          if (!className) continue;
-          const startLine = linesBefore3(content, m2.index) + 1;
-          const { endLine } = extractFunctionBody(lines, startLine - 1);
-          const isPublic = content.slice(Math.max(0, m2.index - 2), m2.index + className.length + 20).includes("public");
-          if (isPublic) exports.push(className);
-          classes.push({ name: className, filePath, startLine, endLine: endLine + 1, methods: [], isExported: isPublic });
-        }
-        const methodPattern = new RegExp(METHOD_DEF.source, "gm");
-        while ((m2 = methodPattern.exec(content)) !== null) {
-          const returnType = m2[1] ?? "";
-          const name = m2[2];
-          if (!name || STATEMENT_KEYWORDS.has(name) || STATEMENT_KEYWORDS.has(returnType.split(/\s/)[0] ?? "")) continue;
-          functions.push(buildMethod(m2, name, m2[3] ?? ""));
-        }
-        const classNames = new Set(classes.map((c3) => c3.name));
-        const constructorPattern = new RegExp(CONSTRUCTOR_DEF.source, "gm");
-        while ((m2 = constructorPattern.exec(content)) !== null) {
-          const name = m2[1];
-          if (!name || !classNames.has(name)) continue;
-          functions.push(buildMethod(m2, name, m2[2] ?? ""));
-        }
-        function buildMethod(match, name, rawParams) {
-          const startLine = linesBefore3(content, match.index) + 1;
-          const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          return {
-            name,
-            filePath,
-            startLine,
-            endLine: endLine + 1,
-            parameters: parseParams3(rawParams),
-            isExported: /\bpublic\b/.test(match[0]),
-            isAsync: false,
-            // Java doesn't have async keyword (CompletableFuture etc. is different)
-            calls: extractCalls3(body, name),
-            complexity: calculateComplexity(body),
-            lineCount: endLine - (startLine - 1) + 1,
-            language: "java"
-          };
-        }
-        const avgComplexity = functions.length > 0 ? functions.reduce((s, f3) => s + f3.complexity, 0) / functions.length : 1;
-        return {
-          filePath,
-          language: "java",
-          functions,
-          classes,
-          imports,
-          exports,
-          lineCount,
-          complexity: Math.round(avgComplexity * 100) / 100,
-          explanation: generateExplanation3(filePath, classes, functions)
-        };
-      }
-    };
-    CONSTRUCTOR_CALL = /\bnew\s+([\w$]+)\s*(?:<[^()]*>)?\s*\(/g;
-    METHOD_REFERENCE = /::\s*([\w$]+)/g;
-  }
-});
-
-// packages/core/src/parser/GoParser.ts
-import path5 from "path";
-function linesBefore4(content, index) {
-  return content.slice(0, index).split("\n").length - 1;
-}
-function parseParams4(raw) {
-  return raw.split(",").map((p2) => {
-    const parts = p2.trim().split(/\s+/);
     return parts[0] ?? "";
   }).filter(Boolean);
 }
-function extractCalls4(body, selfName) {
+function extractCalls3(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const code = blankCommentsAndStrings(body, LEXICAL_SYNTAX.go);
   const pattern = /\b([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)\s*\(/g;
@@ -6228,7 +7298,7 @@ var init_GoParser = __esm({
         while ((m2 = structPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore4(content, m2.index) + 1;
+          const startLine = linesBefore3(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           const isExported = /^[A-Z]/.test(name);
           if (isExported) exports.push(name);
@@ -6238,12 +7308,12 @@ var init_GoParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore4(content, m2.index) + 1;
+          const startLine = linesBefore3(content, m2.index) + 1;
           const isExported = /^[A-Z]/.test(name);
           if (isExported) exports.push(name);
-          const params = parseParams4(m2[3] ?? "");
+          const params = parseParams3(m2[3] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls4(body, name);
+          const calls = extractCalls3(body, name);
           functions.push({
             name,
             filePath,
@@ -6278,16 +7348,16 @@ var init_GoParser = __esm({
 
 // packages/core/src/parser/RustParser.ts
 import path6 from "path";
-function linesBefore5(content, index) {
+function linesBefore4(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams5(raw) {
+function parseParams4(raw) {
   return raw.split(",").map((p2) => {
     const colonIdx = p2.indexOf(":");
     return (colonIdx > 0 ? p2.slice(0, colonIdx) : p2).trim().replace(/^&(?:mut\s+)?/, "");
   }).filter((p2) => p2 && p2 !== "self" && p2 !== "&self" && p2 !== "&mut self");
 }
-function extractCalls5(body, selfName) {
+function extractCalls4(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const code = blankCommentsAndStrings(body, LEXICAL_SYNTAX.rust);
   const pattern = new RegExp(CALL.source, "g");
@@ -6334,7 +7404,7 @@ var init_RustParser = __esm({
         while ((m2 = structPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore5(content, m2.index) + 1;
+          const startLine = linesBefore4(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           const isPub = content.slice(Math.max(0, m2.index - 5), m2.index + 5).includes("pub");
           if (isPub) exports.push(name);
@@ -6344,13 +7414,13 @@ var init_RustParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore5(content, m2.index) + 1;
+          const startLine = linesBefore4(content, m2.index) + 1;
           const isExported = m2[1] !== void 0;
           const isAsync = /\basync\s/.test(m2[0]);
           if (isExported) exports.push(name);
-          const params = parseParams5(m2[3] ?? "");
+          const params = parseParams4(m2[3] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls5(body, name);
+          const calls = extractCalls4(body, name);
           functions.push({
             name,
             filePath,
@@ -6385,16 +7455,16 @@ var init_RustParser = __esm({
 
 // packages/core/src/parser/CppParser.ts
 import path7 from "path";
-function linesBefore6(content, index) {
+function linesBefore5(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams6(raw) {
+function parseParams5(raw) {
   return raw.split(",").map((p2) => {
     const parts = p2.trim().split(/\s+/);
     return parts[parts.length - 1]?.replace(/[*&[\]]/g, "") ?? "";
   }).filter(Boolean);
 }
-function extractCalls6(body, selfName) {
+function extractCalls5(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -6409,13 +7479,13 @@ function generateExplanation6(filePath, language, functions) {
   const base = path7.basename(filePath);
   return `${base} is a ${language === "c" ? "C" : "C++"} file defining ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF4, CLASS_DEF3, INCLUDE_STMT, CppParser, MACRO_SHAPED;
+var FUNC_DEF4, CLASS_DEF2, INCLUDE_STMT, CppParser, MACRO_SHAPED;
 var init_CppParser = __esm({
   "packages/core/src/parser/CppParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF4 = /^(?![ \t]*(?:if|for|while|switch|else|#))[ \t]*([\w*&:<>~\s]+?)\s+(\w+)\s*\(([^;{]*)\)\s*(?:const\s*)?(?:noexcept[^;{]*)?\s*\{/gm;
-    CLASS_DEF3 = /^(?:class|struct)\s+(\w+)(?:\s*:\s*(?:public|private|protected)?\s*([\w:, ]+))?\s*\{/gm;
+    CLASS_DEF2 = /^(?:class|struct)\s+(\w+)(?:\s*:\s*(?:public|private|protected)?\s*([\w:, ]+))?\s*\{/gm;
     INCLUDE_STMT = /^#include\s+[<"]([^>"]+)[>"]/gm;
     CppParser = {
       language: "cpp",
@@ -6436,11 +7506,11 @@ var init_CppParser = __esm({
           const isRelative = !content.slice(m2.index, m2.index + src.length + 15).includes("<");
           imports.push({ source: src, symbols: [path7.basename(src, path7.extname(src))], isRelative });
         }
-        const classPattern = new RegExp(CLASS_DEF3.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF2.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore6(content, m2.index) + 1;
+          const startLine = linesBefore5(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: true });
@@ -6450,10 +7520,10 @@ var init_CppParser = __esm({
           const name = m2[2];
           if (!name) continue;
           if (/^(if|for|while|switch|else|do|return|class|struct|namespace)$/.test(name)) continue;
-          const startLine = linesBefore6(content, m2.index) + 1;
-          const params = parseParams6(m2[3] ?? "");
+          const startLine = linesBefore5(content, m2.index) + 1;
+          const params = parseParams5(m2[3] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls6(body, name);
+          const calls = extractCalls5(body, name);
           functions.push({
             name,
             filePath,
@@ -6488,16 +7558,16 @@ var init_CppParser = __esm({
 
 // packages/core/src/parser/CsharpParser.ts
 import path8 from "path";
-function linesBefore7(content, index) {
+function linesBefore6(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams7(raw) {
+function parseParams6(raw) {
   return raw.split(",").map((p2) => {
     const parts = p2.trim().split(/\s+/);
     return parts[parts.length - 1] ?? "";
   }).filter(Boolean);
 }
-function extractCalls7(body, selfName) {
+function extractCalls6(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)\s*\(/g;
   let m2;
@@ -6515,13 +7585,13 @@ function generateExplanation7(filePath, classes, functions) {
   }
   return `${base} is a C# file with ${functions.length} method${functions.length === 1 ? "" : "s"}.`;
 }
-var METHOD_DEF2, CLASS_DEF4, USING_STMT, CsharpParser;
+var METHOD_DEF, CLASS_DEF3, USING_STMT, CsharpParser;
 var init_CsharpParser = __esm({
   "packages/core/src/parser/CsharpParser.ts"() {
     "use strict";
     init_BaseParser();
-    METHOD_DEF2 = /^[ \t]*(?:(?:public|private|protected|internal|static|virtual|override|abstract|async|sealed|partial|new|extern)[ \t]+)*(?:[\w<>[\]?,.]+[ \t]+)+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)\s*\(([^)]*)\)\s*(?:where[^{]*)?\s*\{/gm;
-    CLASS_DEF4 = /^[ \t]*(?:(?:public|private|protected|internal|abstract|sealed|static|partial)\s+)*(?:class|struct|interface|record|enum)\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)(?:\s*:\s*([\w<>.,\s]+))?\s*(?:where[^{]*)?\s*\{/gm;
+    METHOD_DEF = /^[ \t]*(?:(?:public|private|protected|internal|static|virtual|override|abstract|async|sealed|partial|new|extern)[ \t]+)*(?:[\w<>[\]?,.]+[ \t]+)+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)\s*\(([^)]*)\)\s*(?:where[^{]*)?\s*\{/gm;
+    CLASS_DEF3 = /^[ \t]*(?:(?:public|private|protected|internal|abstract|sealed|static|partial)\s+)*(?:class|struct|interface|record|enum)\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)(?:\s*:\s*([\w<>.,\s]+))?\s*(?:where[^{]*)?\s*\{/gm;
     USING_STMT = /^using\s+(?:static\s+)?([\w.]+);/gm;
     CsharpParser = {
       language: "csharp",
@@ -6539,29 +7609,29 @@ var init_CsharpParser = __esm({
           const ns2 = m2[1] ?? "";
           imports.push({ source: ns2, symbols: [ns2.split(".").pop() ?? ns2], isRelative: false });
         }
-        const classPattern = new RegExp(CLASS_DEF4.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF3.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore7(content, m2.index) + 1;
+          const startLine = linesBefore6(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           const isPublic = content.slice(Math.max(0, m2.index - 5), m2.index + name.length + 20).includes("public");
           if (isPublic) exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: isPublic });
         }
-        const methodPattern = new RegExp(METHOD_DEF2.source, "gm");
+        const methodPattern = new RegExp(METHOD_DEF.source, "gm");
         while ((m2 = methodPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
           if (/^(if|for|while|foreach|switch|catch|return|using|await|new)$/.test(name)) continue;
           if (/^[ \t]*(?:return|new|else|await|throw|yield|case|using|lock)\b/.test(m2[0])) continue;
-          const startLine = linesBefore7(content, m2.index) + 1;
+          const startLine = linesBefore6(content, m2.index) + 1;
           const declaration = m2[0].slice(0, m2[0].indexOf(name));
           const isExported = /\bpublic\b/.test(declaration);
           const isAsync = /\basync\b/.test(declaration);
-          const params = parseParams7(m2[2] ?? "");
+          const params = parseParams6(m2[2] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls7(body, name);
+          const calls = extractCalls6(body, name);
           functions.push({
             name,
             filePath,
@@ -6595,7 +7665,7 @@ var init_CsharpParser = __esm({
 
 // packages/core/src/parser/RubyParser.ts
 import path9 from "path";
-function linesBefore8(content, index) {
+function linesBefore7(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
 function underVisibilitySection(lines, defLine, indent) {
@@ -6610,10 +7680,10 @@ function underVisibilitySection(lines, defLine, indent) {
   }
   return false;
 }
-function parseParams8(raw) {
+function parseParams7(raw) {
   return raw.split(",").map((p2) => p2.trim().replace(/^[*&]/, "").replace(/=.*$/, "").trim()).filter(Boolean);
 }
-function extractCalls8(body, selfName) {
+function extractCalls7(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+[?!]?)\s*[({]/g;
   let m2;
@@ -6631,14 +7701,14 @@ function generateExplanation8(filePath, classes, functions) {
   }
   return `${base} is a Ruby file with ${functions.length} method${functions.length === 1 ? "" : "s"}.`;
 }
-var METHOD_DEF3, VISIBILITY_BY_NAME, CLASS_DEF5, REQUIRE_STMT2, RubyParser;
+var METHOD_DEF2, VISIBILITY_BY_NAME, CLASS_DEF4, REQUIRE_STMT2, RubyParser;
 var init_RubyParser = __esm({
   "packages/core/src/parser/RubyParser.ts"() {
     "use strict";
     init_BaseParser();
-    METHOD_DEF3 = /^( *)(?:(?:private|protected|public)[ \t]+)?def[ \t]+(?:self\.)?([\wÀ-ɏͰ-ϿЀ-ӿ֐-׿؀-ۿऀ-ॿ一-鿿가-힯$]+[?!]?)\s*(?:\(([^)]*)\))?/gm;
+    METHOD_DEF2 = /^( *)(?:(?:private|protected|public)[ \t]+)?def[ \t]+(?:self\.)?([\wÀ-ɏͰ-ϿЀ-ӿ֐-׿؀-ۿऀ-ॿ一-鿿가-힯$]+[?!]?)\s*(?:\(([^)]*)\))?/gm;
     VISIBILITY_BY_NAME = /^\s*(?:private|protected|private_class_method)\s+((?::[\w?!]+\s*,?\s*)+)/gm;
-    CLASS_DEF5 = /^( *)class\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)(?:\s*<\s*([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+))?/gm;
+    CLASS_DEF4 = /^( *)class\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)(?:\s*<\s*([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+))?/gm;
     REQUIRE_STMT2 = /^(?:require|require_relative|load)\s+['"]([^'"]+)['"]/gm;
     RubyParser = {
       language: "ruby",
@@ -6656,12 +7726,12 @@ var init_RubyParser = __esm({
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: src.startsWith(".") });
         }
-        const classPattern = new RegExp(CLASS_DEF5.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF4.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const indent = (m2[1] ?? "").length;
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore8(content, m2.index) + 1;
+          const startLine = linesBefore7(content, m2.index) + 1;
           const { endLine } = extractIndentedBody(lines, startLine - 1);
           if (indent === 0) exports.push(name);
           classes.push({
@@ -6678,15 +7748,15 @@ var init_RubyParser = __esm({
         for (const v2 of content.matchAll(VISIBILITY_BY_NAME)) {
           for (const sym of (v2[1] ?? "").matchAll(/:([\w?!]+)/g)) if (sym[1]) privateByName.add(sym[1]);
         }
-        const methodPattern = new RegExp(METHOD_DEF3.source, "gm");
+        const methodPattern = new RegExp(METHOD_DEF2.source, "gm");
         while ((m2 = methodPattern.exec(content)) !== null) {
           const indent = (m2[1] ?? "").length;
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore8(content, m2.index) + 1;
-          const params = parseParams8(m2[3] ?? "");
+          const startLine = linesBefore7(content, m2.index) + 1;
+          const params = parseParams7(m2[3] ?? "");
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
-          const calls = extractCalls8(body, name);
+          const calls = extractCalls7(body, name);
           const isPrivate = /^\s*(?:private|protected)\s/.test(m2[0]) || privateByName.has(name) || underVisibilitySection(lines, startLine - 1, indent);
           functions.push({
             name,
@@ -6725,13 +7795,13 @@ var init_RubyParser = __esm({
 
 // packages/core/src/parser/PhpParser.ts
 import path10 from "path";
-function linesBefore9(content, index) {
+function linesBefore8(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams9(raw) {
+function parseParams8(raw) {
   return raw.split(",").map((p2) => p2.trim().replace(/\$/, "").replace(/=.*$/, "").split(/\s+/).pop() ?? "").filter(Boolean);
 }
-function extractCalls9(body, selfName) {
+function extractCalls8(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)\s*\(/g;
   let m2;
@@ -6749,13 +7819,13 @@ function generateExplanation9(filePath, classes, functions) {
   }
   return `${base} is a PHP file with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF5, CLASS_DEF6, USE_STMT2, REQUIRE_STMT3, PhpParser;
+var FUNC_DEF5, CLASS_DEF5, USE_STMT2, REQUIRE_STMT3, PhpParser;
 var init_PhpParser = __esm({
   "packages/core/src/parser/PhpParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF5 = /^[ \t]*(?:(?:public|private|protected|static|abstract|final)\s+)*function\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)\s*\(([^)]*)\)/gm;
-    CLASS_DEF6 = /^[ \t]*(?:(?:abstract|final)\s+)*class\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)(?:\s+extends\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+))?(?:\s+implements\s+([\w,\s]+))?\s*\{/gm;
+    CLASS_DEF5 = /^[ \t]*(?:(?:abstract|final)\s+)*class\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+)(?:\s+extends\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+))?(?:\s+implements\s+([\w,\s]+))?\s*\{/gm;
     USE_STMT2 = /^use\s+([\w\\]+)(?:\s+as\s+([\w\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\uAC00-\uD7AF$]+))?;/gm;
     REQUIRE_STMT3 = /^(?:require|include)(?:_once)?\s*\(?['"]([^'"]+)['"]\)?/gm;
     PhpParser = {
@@ -6780,11 +7850,11 @@ var init_PhpParser = __esm({
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: src.startsWith(".") || src.startsWith("/") });
         }
-        const classPattern = new RegExp(CLASS_DEF6.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF5.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore9(content, m2.index) + 1;
+          const startLine = linesBefore8(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({
@@ -6801,12 +7871,12 @@ var init_PhpParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore9(content, m2.index) + 1;
+          const startLine = linesBefore8(content, m2.index) + 1;
           const prefix = content.slice(Math.max(0, m2.index - 5), m2.index + 20);
           const isExported = prefix.includes("public") || !prefix.includes("private");
-          const params = parseParams9(m2[2] ?? "");
+          const params = parseParams8(m2[2] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls9(body, name);
+          const calls = extractCalls8(body, name);
           functions.push({
             name,
             filePath,
@@ -6840,13 +7910,13 @@ var init_PhpParser = __esm({
 
 // packages/core/src/parser/KotlinParser.ts
 import path11 from "path";
-function linesBefore10(c3, i) {
+function linesBefore9(c3, i) {
   return c3.slice(0, i).split("\n").length - 1;
 }
-function parseParams10(raw) {
+function parseParams9(raw) {
   return raw.split(",").map((p2) => p2.trim().split(":")[0]?.trim() ?? "").filter(Boolean);
 }
-function extractCalls10(body, self) {
+function extractCalls9(body, self) {
   const calls = /* @__PURE__ */ new Set();
   const p2 = /\b(\w+)\s*\(/g;
   let m2;
@@ -6856,14 +7926,14 @@ function extractCalls10(body, self) {
   }
   return Array.from(calls);
 }
-var FUNC_DEF6, CLASS_DEF7, IMPORT_STMT4, KotlinParser;
+var FUNC_DEF6, CLASS_DEF6, IMPORT_STMT3, KotlinParser;
 var init_KotlinParser = __esm({
   "packages/core/src/parser/KotlinParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF6 = /^[ \t]*(?:(?:public|private|protected|internal|open|final|abstract|override|inline|suspend|tailrec|operator|infix|external)\s+)*fun\s+(?:<[^>]*>\s+)?(\w+)\s*\(([^)]*)\)/gm;
-    CLASS_DEF7 = /^[ \t]*(?:(?:public|private|protected|internal|abstract|sealed|open|data|enum|value|inner|companion)\s+)*(?:class|object|interface)\s+(\w+)/gm;
-    IMPORT_STMT4 = /^import\s+([\w.]+(?:\.\*)?)/gm;
+    CLASS_DEF6 = /^[ \t]*(?:(?:public|private|protected|internal|abstract|sealed|open|data|enum|value|inner|companion)\s+)*(?:class|object|interface)\s+(\w+)/gm;
+    IMPORT_STMT3 = /^import\s+([\w.]+(?:\.\*)?)/gm;
     KotlinParser = {
       language: "kotlin",
       extensions: [".kt", ".kts"],
@@ -6875,16 +7945,16 @@ var init_KotlinParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT4.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT3.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [src.split(".").pop() ?? src], isRelative: false });
         }
-        const classPattern = new RegExp(CLASS_DEF7.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF6.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore10(content, m2.index) + 1;
+          const startLine = linesBefore9(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           const isPub = !content.slice(Math.max(0, m2.index - 5), m2.index).includes("private");
           if (isPub) exports.push(name);
@@ -6894,15 +7964,15 @@ var init_KotlinParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore10(content, m2.index) + 1;
+          const startLine = linesBefore9(content, m2.index) + 1;
           const prefix = content.slice(Math.max(0, m2.index - 5), m2.index + 40);
           const isExported = !prefix.includes("private");
           const isAsync = prefix.includes("suspend");
           if (isExported) exports.push(name);
-          const params = parseParams10(m2[2] ?? "");
+          const params = parseParams9(m2[2] ?? "");
           const isExpressionBody = /^\s*(?::[^={\n]+)?=(?!=)/.test(content.slice(m2.index + m2[0].length));
           const { body, endLine } = isExpressionBody ? extractExpressionBody(lines, startLine - 1) : extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls10(body, name);
+          const calls = extractCalls9(body, name);
           functions.push({
             name,
             filePath,
@@ -6936,16 +8006,16 @@ var init_KotlinParser = __esm({
 
 // packages/core/src/parser/SwiftParser.ts
 import path12 from "path";
-function linesBefore11(c3, i) {
+function linesBefore10(c3, i) {
   return c3.slice(0, i).split("\n").length - 1;
 }
-function parseParams11(raw) {
+function parseParams10(raw) {
   return raw.split(",").map((p2) => {
     const parts = p2.trim().split(":");
     return (parts[0]?.split(/\s+/).pop() ?? "").trim();
   }).filter(Boolean);
 }
-function extractCalls11(body, self) {
+function extractCalls10(body, self) {
   const calls = /* @__PURE__ */ new Set();
   const p2 = /\b(\w+)\s*\(/g;
   let m2;
@@ -6955,14 +8025,14 @@ function extractCalls11(body, self) {
   }
   return Array.from(calls);
 }
-var FUNC_DEF7, CLASS_DEF8, IMPORT_STMT5, SwiftParser;
+var FUNC_DEF7, CLASS_DEF7, IMPORT_STMT4, SwiftParser;
 var init_SwiftParser = __esm({
   "packages/core/src/parser/SwiftParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF7 = /^[ \t]*(?:(?:public|private|internal|fileprivate|open|static|class|override|final|mutating|nonmutating|required|convenience|lazy|weak)\s+)*(?:async\s+)?func\s+(\w+)\s*(?:<[^>]*>)?\s*\(([^)]*)\)/gm;
-    CLASS_DEF8 = /^[ \t]*(?:(?:public|private|internal|open|final)\s+)*(?:class|struct|enum|protocol|actor)\s+(\w+)/gm;
-    IMPORT_STMT5 = /^import\s+(\w[\w.]*)/gm;
+    CLASS_DEF7 = /^[ \t]*(?:(?:public|private|internal|open|final)\s+)*(?:class|struct|enum|protocol|actor)\s+(\w+)/gm;
+    IMPORT_STMT4 = /^import\s+(\w[\w.]*)/gm;
     SwiftParser = {
       language: "swift",
       extensions: [".swift"],
@@ -6974,16 +8044,16 @@ var init_SwiftParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT5.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT4.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [src], isRelative: false });
         }
-        const classPattern = new RegExp(CLASS_DEF8.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF7.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore11(content, m2.index) + 1;
+          const startLine = linesBefore10(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           const isPub = content.slice(Math.max(0, m2.index - 5), m2.index + 20).includes("public");
           if (isPub) exports.push(name);
@@ -6993,14 +8063,14 @@ var init_SwiftParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore11(content, m2.index) + 1;
+          const startLine = linesBefore10(content, m2.index) + 1;
           const prefix = content.slice(Math.max(0, m2.index - 5), m2.index + 40);
           const isExported = prefix.includes("public") || prefix.includes("open");
           const isAsync = prefix.includes("async");
           if (isExported) exports.push(name);
-          const params = parseParams11(m2[2] ?? "");
+          const params = parseParams10(m2[2] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls11(body, name);
+          const calls = extractCalls10(body, name);
           functions.push({
             name,
             filePath,
@@ -7034,13 +8104,13 @@ var init_SwiftParser = __esm({
 
 // packages/core/src/parser/ScalaParser.ts
 import path13 from "path";
-function linesBefore12(c3, i) {
+function linesBefore11(c3, i) {
   return c3.slice(0, i).split("\n").length - 1;
 }
-function parseParams12(raw) {
+function parseParams11(raw) {
   return raw.split(",").map((p2) => p2.trim().split(":")[0]?.trim() ?? "").filter(Boolean);
 }
-function extractCalls12(body, self) {
+function extractCalls11(body, self) {
   const calls = /* @__PURE__ */ new Set();
   const p2 = /\b(\w+)\s*\(/g;
   let m2;
@@ -7050,14 +8120,14 @@ function extractCalls12(body, self) {
   }
   return Array.from(calls);
 }
-var FUNC_DEF8, CLASS_DEF9, IMPORT_STMT6, ScalaParser;
+var FUNC_DEF8, CLASS_DEF8, IMPORT_STMT5, ScalaParser;
 var init_ScalaParser = __esm({
   "packages/core/src/parser/ScalaParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF8 = /^[ \t]*(?:(?:def|val|var)\s+)(\w+)\s*(?:\[[^\]]*\])?\s*\(([^)]*)\)/gm;
-    CLASS_DEF9 = /^[ \t]*(?:(?:abstract|sealed|final|case|implicit)\s+)*(?:class|object|trait)\s+(\w+)/gm;
-    IMPORT_STMT6 = /^import\s+([\w.{}*, ]+)/gm;
+    CLASS_DEF8 = /^[ \t]*(?:(?:abstract|sealed|final|case|implicit)\s+)*(?:class|object|trait)\s+(\w+)/gm;
+    IMPORT_STMT5 = /^import\s+([\w.{}*, ]+)/gm;
     ScalaParser = {
       language: "scala",
       extensions: [".scala"],
@@ -7069,16 +8139,16 @@ var init_ScalaParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT6.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT5.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [src.split(".").pop()?.replace(/[{}]/g, "") ?? src], isRelative: false });
         }
-        const classPattern = new RegExp(CLASS_DEF9.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF8.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore12(content, m2.index) + 1;
+          const startLine = linesBefore11(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: true });
@@ -7087,11 +8157,11 @@ var init_ScalaParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore12(content, m2.index) + 1;
-          const params = parseParams12(m2[2] ?? "");
+          const startLine = linesBefore11(content, m2.index) + 1;
+          const params = parseParams11(m2[2] ?? "");
           const isExpressionBody = /^\s*(?::[^={\n]+)?=\s*(?!\{|\s)/.test(content.slice(m2.index + m2[0].length));
           const { body, endLine } = isExpressionBody ? extractExpressionBody(lines, startLine - 1) : extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls12(body, name);
+          const calls = extractCalls11(body, name);
           const prefix = content.slice(Math.max(0, m2.index - 5), m2.index + 20);
           functions.push({
             name,
@@ -7126,16 +8196,16 @@ var init_ScalaParser = __esm({
 
 // packages/core/src/parser/DartParser.ts
 import path14 from "path";
-function linesBefore13(c3, i) {
+function linesBefore12(c3, i) {
   return c3.slice(0, i).split("\n").length - 1;
 }
-function parseParams13(raw) {
+function parseParams12(raw) {
   return raw.split(",").map((p2) => {
     const parts = p2.trim().split(/\s+/);
     return parts[parts.length - 1]?.replace(/[{}?=].*$/, "").trim() ?? "";
   }).filter(Boolean);
 }
-function extractCalls13(body, self) {
+function extractCalls12(body, self) {
   const calls = /* @__PURE__ */ new Set();
   const p2 = /\b(\w+)\s*\(/g;
   let m2;
@@ -7145,14 +8215,14 @@ function extractCalls13(body, self) {
   }
   return Array.from(calls);
 }
-var FUNC_DEF9, CLASS_DEF10, IMPORT_STMT7, DartParser;
+var FUNC_DEF9, CLASS_DEF9, IMPORT_STMT6, DartParser;
 var init_DartParser = __esm({
   "packages/core/src/parser/DartParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF9 = /^[ \t]*(?:(?:static|async|external|abstract)\s+)*(?:[\w<>?[\]]+\s+)?(\w+)\s*\(([^)]*)\)\s*(?:async\s*)?\s*\{/gm;
-    CLASS_DEF10 = /^[ \t]*(?:(?:abstract|mixin)\s+)*class\s+(\w+)/gm;
-    IMPORT_STMT7 = /^import\s+['"]([^'"]+)['"]/gm;
+    CLASS_DEF9 = /^[ \t]*(?:(?:abstract|mixin)\s+)*class\s+(\w+)/gm;
+    IMPORT_STMT6 = /^import\s+['"]([^'"]+)['"]/gm;
     DartParser = {
       language: "dart",
       extensions: [".dart"],
@@ -7164,16 +8234,16 @@ var init_DartParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT7.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT6.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: src.startsWith(".") || !src.startsWith("dart:") && !src.startsWith("package:") });
         }
-        const classPattern = new RegExp(CLASS_DEF10.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF9.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore13(content, m2.index) + 1;
+          const startLine = linesBefore12(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           const isPub = !name.startsWith("_");
           if (isPub) exports.push(name);
@@ -7183,14 +8253,14 @@ var init_DartParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name || /^(if|for|while|switch|catch)$/.test(name)) continue;
-          const startLine = linesBefore13(content, m2.index) + 1;
+          const startLine = linesBefore12(content, m2.index) + 1;
           const prefix = content.slice(Math.max(0, m2.index - 5), m2.index + 40);
           const isAsync = prefix.includes("async");
           const isExported = !name.startsWith("_");
           if (isExported) exports.push(name);
-          const params = parseParams13(m2[2] ?? "");
+          const params = parseParams12(m2[2] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls13(body, name);
+          const calls = extractCalls12(body, name);
           functions.push({
             name,
             filePath,
@@ -7224,10 +8294,10 @@ var init_DartParser = __esm({
 
 // packages/core/src/parser/ShellParser.ts
 import path15 from "path";
-function linesBefore14(c3, i) {
+function linesBefore13(c3, i) {
   return c3.slice(0, i).split("\n").length - 1;
 }
-function extractCalls14(body, self) {
+function extractCalls13(body, self) {
   const calls = /* @__PURE__ */ new Set();
   let m2;
   const SKIP = /* @__PURE__ */ new Set([
@@ -7293,9 +8363,9 @@ var init_ShellParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore14(content, m2.index) + 1;
+          const startLine = linesBefore13(content, m2.index) + 1;
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls14(body, name);
+          const calls = extractCalls13(body, name);
           functions.push({
             name,
             filePath,
@@ -7331,14 +8401,14 @@ var init_ShellParser = __esm({
 
 // packages/core/src/parser/LuaParser.ts
 import path16 from "path";
-function linesBefore15(content, index) {
+function linesBefore14(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams14(raw, isMethod) {
+function parseParams13(raw, isMethod) {
   const params = raw.split(",").map((p2) => p2.trim()).filter(Boolean);
   return isMethod ? ["self", ...params] : params;
 }
-function extractCalls15(body, selfName) {
+function extractCalls14(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([\w.:]+)\s*\(/g;
   let m2;
@@ -7403,10 +8473,10 @@ var init_LuaParser = __esm({
           const isLocal = Boolean(m2[1]);
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore15(content, m2.index) + 1;
-          const params = parseParams14(m2[3] ?? "", name.includes(":"));
+          const startLine = linesBefore14(content, m2.index) + 1;
+          const params = parseParams13(m2[3] ?? "", name.includes(":"));
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
-          const calls = extractCalls15(body, name);
+          const calls = extractCalls14(body, name);
           const isExported = !isLocal;
           if (isExported) exports.push(name);
           functions.push({
@@ -7442,15 +8512,15 @@ var init_LuaParser = __esm({
 
 // packages/core/src/parser/PerlParser.ts
 import path17 from "path";
-function linesBefore16(content, index) {
+function linesBefore15(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams15(body) {
+function parseParams14(body) {
   const match = /my\s*\(([^)]+)\)\s*=\s*@_/.exec(body);
   if (!match?.[1]) return [];
   return match[1].split(",").map((p2) => p2.trim()).filter(Boolean);
 }
-function extractCalls16(body, selfName) {
+function extractCalls15(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -7523,9 +8593,9 @@ var init_PerlParser = __esm({
         while ((m2 = subPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore16(content, m2.index) + 1;
+          const startLine = linesBefore15(content, m2.index) + 1;
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls16(body, name);
+          const calls = extractCalls15(body, name);
           const isExported = !name.startsWith("_");
           if (isExported) exports.push(name);
           functions.push({
@@ -7533,7 +8603,7 @@ var init_PerlParser = __esm({
             filePath,
             startLine,
             endLine: endLine + 1,
-            parameters: parseParams15(body),
+            parameters: parseParams14(body),
             isExported,
             isAsync: false,
             calls,
@@ -7561,14 +8631,14 @@ var init_PerlParser = __esm({
 
 // packages/core/src/parser/HaskellParser.ts
 import path18 from "path";
-function linesBefore17(content, index) {
+function linesBefore16(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams16(raw) {
+function parseParams15(raw) {
   const argsOnly = raw.split("|")[0] ?? "";
   return argsOnly.trim().split(/\s+/).filter((p2) => p2.length > 0 && /^[a-zA-Z_(]/.test(p2));
 }
-function extractCalls17(body, selfName) {
+function extractCalls16(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([a-z_][\w']*)\b/g;
   let m2;
@@ -7586,7 +8656,7 @@ function generateExplanation12(filePath, functions, classes) {
   }
   return `${base} is a Haskell module with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_EQUATION, RESERVED_WORDS, MODULE_DECL, IMPORT_STMT8, TYPE_DECL, HaskellParser;
+var FUNC_EQUATION, RESERVED_WORDS, MODULE_DECL, IMPORT_STMT7, TYPE_DECL, HaskellParser;
 var init_HaskellParser = __esm({
   "packages/core/src/parser/HaskellParser.ts"() {
     "use strict";
@@ -7617,7 +8687,7 @@ var init_HaskellParser = __esm({
       "else"
     ]);
     MODULE_DECL = /^module\s+([\w.]+)/m;
-    IMPORT_STMT8 = /^import\s+(?:qualified\s+)?([\w.]+)/gm;
+    IMPORT_STMT7 = /^import\s+(?:qualified\s+)?([\w.]+)/gm;
     TYPE_DECL = /^(data|newtype|class)\s+([A-Z]\w*)/gm;
     HaskellParser = {
       language: "haskell",
@@ -7631,7 +8701,7 @@ var init_HaskellParser = __esm({
         let m2;
         const moduleMatch = MODULE_DECL.exec(content);
         if (moduleMatch?.[1]) exports.push(moduleMatch[1]);
-        const importPattern = new RegExp(IMPORT_STMT8.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT7.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: false });
@@ -7640,7 +8710,7 @@ var init_HaskellParser = __esm({
         while ((m2 = typePattern.exec(content)) !== null) {
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore17(content, m2.index) + 1;
+          const startLine = linesBefore16(content, m2.index) + 1;
           const { endLine } = extractIndentedBody(lines, startLine - 1);
           exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: true });
@@ -7650,9 +8720,9 @@ var init_HaskellParser = __esm({
         while ((m2 = eqPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name || RESERVED_WORDS.has(name)) continue;
-          const startLine = linesBefore17(content, m2.index) + 1;
+          const startLine = linesBefore16(content, m2.index) + 1;
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
-          const params = parseParams16(m2[2] ?? "");
+          const params = parseParams15(m2[2] ?? "");
           raw.push({ name, startLine, endLine: endLine + 1, body, params });
         }
         const merged = [];
@@ -7667,7 +8737,7 @@ ${eq.body}`;
           }
         }
         const functions = merged.map((eq) => {
-          const calls = extractCalls17(eq.body, eq.name);
+          const calls = extractCalls16(eq.body, eq.name);
           exports.push(eq.name);
           return {
             name: eq.name,
@@ -7703,13 +8773,13 @@ ${eq.body}`;
 
 // packages/core/src/parser/ElixirParser.ts
 import path19 from "path";
-function linesBefore18(content, index) {
+function linesBefore17(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams17(raw) {
+function parseParams16(raw) {
   return raw.split(",").map((p2) => p2.trim().split("\\\\")[0]?.trim() ?? "").filter(Boolean);
 }
-function extractCalls18(body, selfName) {
+function extractCalls17(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -7749,14 +8819,14 @@ function generateExplanation13(filePath, classes, functions) {
   }
   return `${base} is an Elixir file with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF12, MODULE_DEF, IMPORT_STMT9, ElixirParser;
+var FUNC_DEF12, MODULE_DEF, IMPORT_STMT8, ElixirParser;
 var init_ElixirParser = __esm({
   "packages/core/src/parser/ElixirParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF12 = /^( *)def(p)?\s+(\w+[?!]?)\s*(?:\(([^)]*)\))?\s*do\b/gm;
     MODULE_DEF = /^( *)defmodule\s+([\w.]+)\s+do\b/gm;
-    IMPORT_STMT9 = /^\s*(?:import|alias|require|use)\s+([\w.]+)/gm;
+    IMPORT_STMT8 = /^\s*(?:import|alias|require|use)\s+([\w.]+)/gm;
     ElixirParser = {
       language: "elixir",
       extensions: [".ex", ".exs"],
@@ -7768,7 +8838,7 @@ var init_ElixirParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT9.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT8.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: false });
@@ -7778,7 +8848,7 @@ var init_ElixirParser = __esm({
           const indent = (m2[1] ?? "").length;
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore18(content, m2.index) + 1;
+          const startLine = linesBefore17(content, m2.index) + 1;
           const { endLine } = extractIndentedBody(lines, startLine - 1);
           const isTopLevel = indent === 0;
           if (isTopLevel) exports.push(name);
@@ -7789,10 +8859,10 @@ var init_ElixirParser = __esm({
           const isPrivate = Boolean(m2[2]);
           const name = m2[3];
           if (!name) continue;
-          const startLine = linesBefore18(content, m2.index) + 1;
-          const params = parseParams17(m2[4] ?? "");
+          const startLine = linesBefore17(content, m2.index) + 1;
+          const params = parseParams16(m2[4] ?? "");
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
-          const calls = extractCalls18(body, name);
+          const calls = extractCalls17(body, name);
           const isExported = !isPrivate;
           if (isExported) exports.push(name);
           functions.push({
@@ -7828,7 +8898,7 @@ var init_ElixirParser = __esm({
 
 // packages/core/src/parser/ObjectiveCParser.ts
 import path20 from "path";
-function linesBefore19(content, index) {
+function linesBefore18(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
 function findMatchingEnd(lines, startLine) {
@@ -7837,7 +8907,7 @@ function findMatchingEnd(lines, startLine) {
   }
   return lines.length - 1;
 }
-function parseParams18(declLine) {
+function parseParams17(declLine) {
   const params = [];
   const pattern = /:\s*\([^)]*\)\s*(\w+)/g;
   let m2;
@@ -7846,7 +8916,7 @@ function parseParams18(declLine) {
   }
   return params;
 }
-function extractCalls19(body, selfName) {
+function extractCalls18(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\[\s*[\w.]+\s+(\w+)/g;
   let m2;
@@ -7864,15 +8934,15 @@ function generateExplanation14(filePath, classes, functions) {
   }
   return `${base} is an Objective-C file with ${functions.length} method${functions.length === 1 ? "" : "s"}.`;
 }
-var METHOD_DEF4, INTERFACE_DEF, IMPLEMENTATION_DEF, IMPORT_STMT10, ObjectiveCParser;
+var METHOD_DEF3, INTERFACE_DEF, IMPLEMENTATION_DEF, IMPORT_STMT9, ObjectiveCParser;
 var init_ObjectiveCParser = __esm({
   "packages/core/src/parser/ObjectiveCParser.ts"() {
     "use strict";
     init_BaseParser();
-    METHOD_DEF4 = /^([-+])\s*\(([^)]*)\)\s*([\w]+)/gm;
+    METHOD_DEF3 = /^([-+])\s*\(([^)]*)\)\s*([\w]+)/gm;
     INTERFACE_DEF = /^@interface\s+(\w+)\s*(?::\s*(\w+))?/gm;
     IMPLEMENTATION_DEF = /^@implementation\s+(\w+)/gm;
-    IMPORT_STMT10 = /^#(?:import|include)\s+(?:"([^"]+)"|<([^>]+)>)/gm;
+    IMPORT_STMT9 = /^#(?:import|include)\s+(?:"([^"]+)"|<([^>]+)>)/gm;
     ObjectiveCParser = {
       language: "objectivec",
       extensions: [".m", ".mm"],
@@ -7884,7 +8954,7 @@ var init_ObjectiveCParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT10.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT9.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const quoted = m2[1];
           const angled = m2[2];
@@ -7897,7 +8967,7 @@ var init_ObjectiveCParser = __esm({
           while ((m2 = classPattern.exec(content)) !== null) {
             const name = m2[1];
             if (!name) continue;
-            const startLine = linesBefore19(content, m2.index) + 1;
+            const startLine = linesBefore18(content, m2.index) + 1;
             const endLine = findMatchingEnd(lines, startLine - 1);
             if (isInterface) exports.push(name);
             classes.push({
@@ -7911,23 +8981,23 @@ var init_ObjectiveCParser = __esm({
             });
           }
         }
-        const methodPattern = new RegExp(METHOD_DEF4.source, "gm");
+        const methodPattern = new RegExp(METHOD_DEF3.source, "gm");
         while ((m2 = methodPattern.exec(content)) !== null) {
           const name = m2[3];
           if (!name) continue;
-          const lineIdx = linesBefore19(content, m2.index);
+          const lineIdx = linesBefore18(content, m2.index);
           const declLine = lines[lineIdx] ?? "";
           if (!declLine.includes("{")) continue;
           const startLine = lineIdx + 1;
           const { body, endLine } = extractFunctionBody(lines, lineIdx);
-          const calls = extractCalls19(body, name);
+          const calls = extractCalls18(body, name);
           exports.push(name);
           functions.push({
             name,
             filePath,
             startLine,
             endLine: endLine + 1,
-            parameters: parseParams18(declLine),
+            parameters: parseParams17(declLine),
             isExported: true,
             // Objective-C has no method-visibility modifier - every method is callable given the class
             isAsync: false,
@@ -7956,13 +9026,13 @@ var init_ObjectiveCParser = __esm({
 
 // packages/core/src/parser/ZigParser.ts
 import path21 from "path";
-function linesBefore20(content, index) {
+function linesBefore19(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams19(raw) {
+function parseParams18(raw) {
   return raw.split(",").map((p2) => p2.trim().split(":")[0]?.trim() ?? "").filter(Boolean);
 }
-function extractCalls20(body, selfName) {
+function extractCalls19(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -7977,14 +9047,14 @@ function generateExplanation15(filePath, functions) {
   const base = path21.basename(filePath, ".zig");
   return `${base} is a Zig file with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF13, STRUCT_DEF3, IMPORT_STMT11, ZigParser;
+var FUNC_DEF13, STRUCT_DEF3, IMPORT_STMT10, ZigParser;
 var init_ZigParser = __esm({
   "packages/core/src/parser/ZigParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF13 = /^(pub\s+)?fn\s+(\w+)\s*\(([^)]*)\)/gm;
     STRUCT_DEF3 = /^(pub\s+)?const\s+(\w+)\s*=\s*struct\s*\{/gm;
-    IMPORT_STMT11 = /@import\(\s*"([^"]+)"\s*\)/g;
+    IMPORT_STMT10 = /@import\(\s*"([^"]+)"\s*\)/g;
     ZigParser = {
       language: "zig",
       extensions: [".zig"],
@@ -7996,7 +9066,7 @@ var init_ZigParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT11.source, "g");
+        const importPattern = new RegExp(IMPORT_STMT10.source, "g");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: src.startsWith(".") });
@@ -8006,7 +9076,7 @@ var init_ZigParser = __esm({
           const isPub = Boolean(m2[1]);
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore20(content, m2.index) + 1;
+          const startLine = linesBefore19(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           if (isPub) exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: isPub });
@@ -8016,10 +9086,10 @@ var init_ZigParser = __esm({
           const isPub = Boolean(m2[1]);
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore20(content, m2.index) + 1;
-          const params = parseParams19(m2[3] ?? "");
+          const startLine = linesBefore19(content, m2.index) + 1;
+          const params = parseParams18(m2[3] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls20(body, name);
+          const calls = extractCalls19(body, name);
           if (isPub) exports.push(name);
           functions.push({
             name,
@@ -8054,13 +9124,13 @@ var init_ZigParser = __esm({
 
 // packages/core/src/parser/SolidityParser.ts
 import path22 from "path";
-function linesBefore21(content, index) {
+function linesBefore20(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams20(raw) {
+function parseParams19(raw) {
   return raw.split(",").map((p2) => p2.trim().split(/\s+/).pop() ?? "").filter(Boolean);
 }
-function extractCalls21(body, selfName) {
+function extractCalls20(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -8078,14 +9148,14 @@ function generateExplanation16(filePath, classes, functions) {
   }
   return `${base} is a Solidity file with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF14, CONTRACT_DEF, IMPORT_STMT12, SolidityParser;
+var FUNC_DEF14, CONTRACT_DEF, IMPORT_STMT11, SolidityParser;
 var init_SolidityParser = __esm({
   "packages/core/src/parser/SolidityParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF14 = /^[ \t]*function\s+(\w+)\s*\(([^)]*)\)([^{;]*)\{/gm;
     CONTRACT_DEF = /^(?:abstract\s+)?(?:contract|interface|library)\s+(\w+)(?:\s+is\s+[\w, ]+)?\s*\{/gm;
-    IMPORT_STMT12 = /^import\s+(?:\{[^}]*\}\s+from\s+)?"([^"]+)"/gm;
+    IMPORT_STMT11 = /^import\s+(?:\{[^}]*\}\s+from\s+)?"([^"]+)"/gm;
     SolidityParser = {
       language: "solidity",
       extensions: [".sol"],
@@ -8097,7 +9167,7 @@ var init_SolidityParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT12.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT11.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: src.startsWith(".") });
@@ -8106,7 +9176,7 @@ var init_SolidityParser = __esm({
         while ((m2 = contractPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore21(content, m2.index) + 1;
+          const startLine = linesBefore20(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: true });
@@ -8116,10 +9186,10 @@ var init_SolidityParser = __esm({
           const name = m2[1];
           if (!name) continue;
           const modifiers = m2[3] ?? "";
-          const startLine = linesBefore21(content, m2.index) + 1;
-          const params = parseParams20(m2[2] ?? "");
+          const startLine = linesBefore20(content, m2.index) + 1;
+          const params = parseParams19(m2[2] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls21(body, name);
+          const calls = extractCalls20(body, name);
           const isExported = !/\b(?:private|internal)\b/.test(modifiers);
           if (isExported) exports.push(name);
           functions.push({
@@ -8155,18 +9225,18 @@ var init_SolidityParser = __esm({
 
 // packages/core/src/parser/PowerShellParser.ts
 import path23 from "path";
-function linesBefore22(content, index) {
+function linesBefore21(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams21(raw) {
+function parseParams20(raw) {
   return raw.split(",").map((p2) => p2.trim().replace(/^\[[^\]]+\]\s*/, "").replace(/^\$/, "").replace(/=.*$/, "").trim()).filter(Boolean);
 }
 function parseParamBlock(body) {
   const match = /\bparam\s*\(([^)]*)\)/is.exec(body);
   if (!match?.[1]) return [];
-  return parseParams21(match[1]);
+  return parseParams20(match[1]);
 }
-function extractCalls22(body, selfName) {
+function extractCalls21(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([\w-]+)\s*[\s(]/g;
   let m2;
@@ -8199,13 +9269,13 @@ function generateExplanation17(filePath, functions) {
   const base = path23.basename(filePath, path23.extname(filePath));
   return `${base} is a PowerShell script with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF15, CLASS_DEF11, IMPORT_MODULE, DOT_SOURCE, PowerShellParser;
+var FUNC_DEF15, CLASS_DEF10, IMPORT_MODULE, DOT_SOURCE, PowerShellParser;
 var init_PowerShellParser = __esm({
   "packages/core/src/parser/PowerShellParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF15 = /^function\s+([\w-]+)\s*(?:\(([^)]*)\))?\s*\{/gm;
-    CLASS_DEF11 = /^class\s+(\w+)(?:\s*:\s*(\w+))?\s*\{/gm;
+    CLASS_DEF10 = /^class\s+(\w+)(?:\s*:\s*(\w+))?\s*\{/gm;
     IMPORT_MODULE = /^Import-Module\s+([\w.\\/-]+)/gm;
     DOT_SOURCE = /^\.\s+['"]?([^'";\s]+)['"]?/gm;
     PowerShellParser = {
@@ -8229,11 +9299,11 @@ var init_PowerShellParser = __esm({
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: true });
         }
-        const classPattern = new RegExp(CLASS_DEF11.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF10.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore22(content, m2.index) + 1;
+          const startLine = linesBefore21(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({
@@ -8250,11 +9320,11 @@ var init_PowerShellParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore22(content, m2.index) + 1;
-          const params = parseParams21(m2[2] ?? "");
+          const startLine = linesBefore21(content, m2.index) + 1;
+          const params = parseParams20(m2[2] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
           const allParams = params.length > 0 ? params : parseParamBlock(body);
-          const calls = extractCalls22(body, name);
+          const calls = extractCalls21(body, name);
           exports.push(name);
           functions.push({
             name,
@@ -8290,13 +9360,13 @@ var init_PowerShellParser = __esm({
 
 // packages/core/src/parser/GroovyParser.ts
 import path24 from "path";
-function linesBefore23(content, index) {
+function linesBefore22(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams22(raw) {
+function parseParams21(raw) {
   return raw.split(",").map((p2) => p2.trim().split(/\s+/).pop()?.replace(/=.*$/, "") ?? "").filter(Boolean);
 }
-function extractCalls23(body, selfName) {
+function extractCalls22(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -8314,14 +9384,14 @@ function generateExplanation18(filePath, classes, functions) {
   }
   return `${base} is a Groovy file with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF16, CLASS_DEF12, IMPORT_STMT13, GroovyParser;
+var FUNC_DEF16, CLASS_DEF11, IMPORT_STMT12, GroovyParser;
 var init_GroovyParser = __esm({
   "packages/core/src/parser/GroovyParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF16 = /^[ \t]*(?:(?:public|private|protected|static)\s+)*(?:def|[\w<>[\],. ]+?)\s+(\w+)\s*\(([^)]*)\)\s*\{/gm;
-    CLASS_DEF12 = /^(?:public\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?/gm;
-    IMPORT_STMT13 = /^import\s+(?:static\s+)?([\w.]+)/gm;
+    CLASS_DEF11 = /^(?:public\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?/gm;
+    IMPORT_STMT12 = /^import\s+(?:static\s+)?([\w.]+)/gm;
     GroovyParser = {
       language: "groovy",
       extensions: [".groovy", ".gradle"],
@@ -8333,16 +9403,16 @@ var init_GroovyParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT13.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT12.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: false });
         }
-        const classPattern = new RegExp(CLASS_DEF12.source, "gm");
+        const classPattern = new RegExp(CLASS_DEF11.source, "gm");
         while ((m2 = classPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore23(content, m2.index) + 1;
+          const startLine = linesBefore22(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({
@@ -8360,10 +9430,10 @@ var init_GroovyParser = __esm({
         while ((m2 = funcPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name || SKIP_NAMES.has(name)) continue;
-          const startLine = linesBefore23(content, m2.index) + 1;
-          const params = parseParams22(m2[2] ?? "");
+          const startLine = linesBefore22(content, m2.index) + 1;
+          const params = parseParams21(m2[2] ?? "");
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
-          const calls = extractCalls23(body, name);
+          const calls = extractCalls22(body, name);
           const isPrivate = /\bprivate\b/.test(m2[0]);
           if (!isPrivate) exports.push(name);
           functions.push({
@@ -8399,10 +9469,10 @@ var init_GroovyParser = __esm({
 
 // packages/core/src/parser/OCamlParser.ts
 import path25 from "path";
-function linesBefore24(content, index) {
+function linesBefore23(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function extractCalls24(body, selfName) {
+function extractCalls23(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([a-z_][\w']*)\b/g;
   let m2;
@@ -8467,7 +9537,7 @@ var init_OCamlParser = __esm({
         while ((m2 = modulePattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore24(content, m2.index) + 1;
+          const startLine = linesBefore23(content, m2.index) + 1;
           const { endLine } = extractIndentedBody(lines, startLine - 1);
           exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: true });
@@ -8477,13 +9547,13 @@ var init_OCamlParser = __esm({
         while ((m2 = eqPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name || RESERVED_WORDS2.has(name)) continue;
-          const startLine = linesBefore24(content, m2.index) + 1;
+          const startLine = linesBefore23(content, m2.index) + 1;
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
           const params = (m2[2] ?? "").trim().split(/\s+/).filter(Boolean);
           raw.push({ name, startLine, endLine: endLine + 1, body, params });
         }
         const functions = raw.map((eq) => {
-          const calls = extractCalls24(eq.body, eq.name);
+          const calls = extractCalls23(eq.body, eq.name);
           exports.push(eq.name);
           return {
             name: eq.name,
@@ -8518,10 +9588,10 @@ var init_OCamlParser = __esm({
 
 // packages/core/src/parser/ErlangParser.ts
 import path26 from "path";
-function linesBefore25(content, index) {
+function linesBefore24(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams23(raw) {
+function parseParams22(raw) {
   return raw.split(",").map((p2) => p2.trim().split(/\s+/)[0] ?? "").filter(Boolean);
 }
 function extractClauseGroup(content, startIdx) {
@@ -8538,7 +9608,7 @@ function extractClauseGroup(content, startIdx) {
   }
   return { body: content.slice(startIdx), endIdx: n - 1 };
 }
-function extractCalls25(body, selfName) {
+function extractCalls24(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -8594,11 +9664,11 @@ var init_ErlangParser = __esm({
           const name = m2[1];
           if (!name) continue;
           const startIdx = m2.index;
-          const startLine = linesBefore25(content, startIdx) + 1;
-          const params = parseParams23(m2[2] ?? "");
+          const startLine = linesBefore24(content, startIdx) + 1;
+          const params = parseParams22(m2[2] ?? "");
           const { body, endIdx } = extractClauseGroup(content, startIdx);
-          const endLine = linesBefore25(content, endIdx) + 1;
-          const calls = extractCalls25(body, name);
+          const endLine = linesBefore24(content, endIdx) + 1;
+          const calls = extractCalls24(body, name);
           const isExported = exportedNames.has(name);
           if (isExported) exports.push(name);
           functions.push({
@@ -8635,15 +9705,15 @@ var init_ErlangParser = __esm({
 
 // packages/core/src/parser/ClojureParser.ts
 import path27 from "path";
-function linesBefore26(content, index) {
+function linesBefore25(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams24(body) {
+function parseParams23(body) {
   const match = /\[([^\]]*)\]/.exec(body);
   if (!match?.[1]) return [];
   return match[1].split(/\s+/).filter(Boolean);
 }
-function extractCalls26(body, selfName) {
+function extractCalls25(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\(([\w!?*+<>=./-]+)/g;
   let m2;
@@ -8690,9 +9760,9 @@ var init_ClojureParser = __esm({
           const name = m2[2];
           if (!name) continue;
           const openParenIdx = content.lastIndexOf("(", m2.index);
-          const startLine = linesBefore26(content, openParenIdx) + 1;
+          const startLine = linesBefore25(content, openParenIdx) + 1;
           const { body, endLine } = extractFunctionBody(lines, startLine - 1, "(", ")");
-          const calls = extractCalls26(body, name);
+          const calls = extractCalls25(body, name);
           const isExported = !isPrivate;
           if (isExported) exports.push(name);
           functions.push({
@@ -8700,7 +9770,7 @@ var init_ClojureParser = __esm({
             filePath,
             startLine,
             endLine: endLine + 1,
-            parameters: parseParams24(body),
+            parameters: parseParams23(body),
             isExported,
             isAsync: false,
             calls,
@@ -8728,10 +9798,10 @@ var init_ClojureParser = __esm({
 
 // packages/core/src/parser/FSharpParser.ts
 import path28 from "path";
-function linesBefore27(content, index) {
+function linesBefore26(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function extractCalls27(body, selfName) {
+function extractCalls26(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b([a-z_][\w']*)\b/g;
   let m2;
@@ -8792,7 +9862,7 @@ var init_FSharpParser = __esm({
         while ((m2 = modulePattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name) continue;
-          const startLine = linesBefore27(content, m2.index) + 1;
+          const startLine = linesBefore26(content, m2.index) + 1;
           const { endLine } = extractIndentedBody(lines, startLine - 1);
           exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: true });
@@ -8802,13 +9872,13 @@ var init_FSharpParser = __esm({
         while ((m2 = eqPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name || RESERVED_WORDS3.has(name)) continue;
-          const startLine = linesBefore27(content, m2.index) + 1;
+          const startLine = linesBefore26(content, m2.index) + 1;
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
           const params = (m2[2] ?? "").trim().split(/\s+/).filter(Boolean);
           raw.push({ name, startLine, endLine: endLine + 1, body, params });
         }
         const functions = raw.map((eq) => {
-          const calls = extractCalls27(eq.body, eq.name);
+          const calls = extractCalls26(eq.body, eq.name);
           exports.push(eq.name);
           return {
             name: eq.name,
@@ -8843,13 +9913,13 @@ var init_FSharpParser = __esm({
 
 // packages/core/src/parser/JuliaParser.ts
 import path29 from "path";
-function linesBefore28(content, index) {
+function linesBefore27(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams25(raw) {
+function parseParams24(raw) {
   return raw.split(",").map((p2) => p2.trim().split(/\s*::/)[0]?.replace(/=.*$/, "").trim() ?? "").filter((p2) => p2 && p2 !== ";");
 }
-function extractCalls28(body, selfName) {
+function extractCalls27(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+!?)\s*\(/g;
   let m2;
@@ -8867,14 +9937,14 @@ function generateExplanation23(filePath, functions, classes) {
   }
   return `${base} is a Julia file with ${functions.length} function${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF19, MODULE_DEF4, IMPORT_STMT14, JuliaParser;
+var FUNC_DEF19, MODULE_DEF4, IMPORT_STMT13, JuliaParser;
 var init_JuliaParser = __esm({
   "packages/core/src/parser/JuliaParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF19 = /^( *)function\s+(?:[\w!]+\.)*([\w!]+)\s*(?:\(([^)]*)\))?/gm;
     MODULE_DEF4 = /^( *)module\s+(\w+)/gm;
-    IMPORT_STMT14 = /^\s*(?:using|import)\s+([\w.]+)/gm;
+    IMPORT_STMT13 = /^\s*(?:using|import)\s+([\w.]+)/gm;
     JuliaParser = {
       language: "julia",
       extensions: [".jl"],
@@ -8886,7 +9956,7 @@ var init_JuliaParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT14.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT13.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: false });
@@ -8896,7 +9966,7 @@ var init_JuliaParser = __esm({
           const indent = (m2[1] ?? "").length;
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore28(content, m2.index) + 1;
+          const startLine = linesBefore27(content, m2.index) + 1;
           const { endLine } = extractIndentedBody(lines, startLine - 1);
           const isTopLevel = indent === 0;
           if (isTopLevel) exports.push(name);
@@ -8907,10 +9977,10 @@ var init_JuliaParser = __esm({
           const indent = (m2[1] ?? "").length;
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore28(content, m2.index) + 1;
-          const params = parseParams25(m2[3] ?? "");
+          const startLine = linesBefore27(content, m2.index) + 1;
+          const params = parseParams24(m2[3] ?? "");
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
-          const calls = extractCalls28(body, name);
+          const calls = extractCalls27(body, name);
           const isTopLevel = indent === 0;
           if (isTopLevel) exports.push(name);
           functions.push({
@@ -8946,13 +10016,13 @@ var init_JuliaParser = __esm({
 
 // packages/core/src/parser/NimParser.ts
 import path30 from "path";
-function linesBefore29(content, index) {
+function linesBefore28(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams26(raw) {
+function parseParams25(raw) {
   return raw.split(",").map((p2) => p2.trim().split(/\s*:/)[0]?.trim() ?? "").filter(Boolean);
 }
-function extractCalls29(body, selfName) {
+function extractCalls28(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -8967,13 +10037,13 @@ function generateExplanation24(filePath, functions) {
   const base = path30.basename(filePath, ".nim");
   return `${base} is a Nim file with ${functions.length} procedure${functions.length === 1 ? "" : "s"}.`;
 }
-var FUNC_DEF20, IMPORT_STMT15, NimParser;
+var FUNC_DEF20, IMPORT_STMT14, NimParser;
 var init_NimParser = __esm({
   "packages/core/src/parser/NimParser.ts"() {
     "use strict";
     init_BaseParser();
     FUNC_DEF20 = /^( *)proc\s+(\w+)(\*)?\s*\(([^)]*)\)/gm;
-    IMPORT_STMT15 = /^import\s+([\w/, ]+)/gm;
+    IMPORT_STMT14 = /^import\s+([\w/, ]+)/gm;
     NimParser = {
       language: "nim",
       extensions: [".nim"],
@@ -8985,7 +10055,7 @@ var init_NimParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT15.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT14.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const mods = (m2[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
           for (const mod of mods) imports.push({ source: mod, symbols: [], isRelative: mod.startsWith(".") });
@@ -8996,10 +10066,10 @@ var init_NimParser = __esm({
           const name = m2[2];
           if (!name) continue;
           const isExportMarked = Boolean(m2[3]);
-          const startLine = linesBefore29(content, m2.index) + 1;
-          const params = parseParams26(m2[4] ?? "");
+          const startLine = linesBefore28(content, m2.index) + 1;
+          const params = parseParams25(m2[4] ?? "");
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
-          const calls = extractCalls29(body, name);
+          const calls = extractCalls28(body, name);
           const isTopLevel = indent === 0;
           const isExported = isTopLevel && isExportMarked;
           if (isExported) exports.push(name);
@@ -9036,13 +10106,13 @@ var init_NimParser = __esm({
 
 // packages/core/src/parser/CrystalParser.ts
 import path31 from "path";
-function linesBefore30(content, index) {
+function linesBefore29(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams27(raw) {
+function parseParams26(raw) {
   return raw.split(",").map((p2) => p2.trim().replace(/^@/, "").split(/\s*:/)[0]?.replace(/=.*$/, "").trim() ?? "").filter(Boolean);
 }
-function extractCalls30(body, selfName) {
+function extractCalls29(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*[({]/g;
   let m2;
@@ -9060,13 +10130,13 @@ function generateExplanation25(filePath, classes, functions) {
   }
   return `${base} is a Crystal file with ${functions.length} method${functions.length === 1 ? "" : "s"}.`;
 }
-var METHOD_DEF5, CLASS_DEF13, MODULE_DEF5, REQUIRE_STMT6, CrystalParser;
+var METHOD_DEF4, CLASS_DEF12, MODULE_DEF5, REQUIRE_STMT6, CrystalParser;
 var init_CrystalParser = __esm({
   "packages/core/src/parser/CrystalParser.ts"() {
     "use strict";
     init_BaseParser();
-    METHOD_DEF5 = /^( *)(private\s+)?def\s+([\w]+[?!]?)\s*(?:\(([^)]*)\))?/gm;
-    CLASS_DEF13 = /^( *)class\s+(\w+)(?:\s*<\s*(\w+))?/gm;
+    METHOD_DEF4 = /^( *)(private\s+)?def\s+([\w]+[?!]?)\s*(?:\(([^)]*)\))?/gm;
+    CLASS_DEF12 = /^( *)class\s+(\w+)(?:\s*<\s*(\w+))?/gm;
     MODULE_DEF5 = /^( *)module\s+(\w+)/gm;
     REQUIRE_STMT6 = /^require\s+"([^"]+)"/gm;
     CrystalParser = {
@@ -9085,13 +10155,13 @@ var init_CrystalParser = __esm({
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: src.startsWith(".") });
         }
-        for (const pattern of [CLASS_DEF13, MODULE_DEF5]) {
+        for (const pattern of [CLASS_DEF12, MODULE_DEF5]) {
           const classPattern = new RegExp(pattern.source, "gm");
           while ((m2 = classPattern.exec(content)) !== null) {
             const indent = (m2[1] ?? "").length;
             const name = m2[2];
             if (!name) continue;
-            const startLine = linesBefore30(content, m2.index) + 1;
+            const startLine = linesBefore29(content, m2.index) + 1;
             const { endLine } = extractIndentedBody(lines, startLine - 1);
             const isTopLevel = indent === 0;
             if (isTopLevel) exports.push(name);
@@ -9106,16 +10176,16 @@ var init_CrystalParser = __esm({
             });
           }
         }
-        const methodPattern = new RegExp(METHOD_DEF5.source, "gm");
+        const methodPattern = new RegExp(METHOD_DEF4.source, "gm");
         while ((m2 = methodPattern.exec(content)) !== null) {
           const indent = (m2[1] ?? "").length;
           const isPrivate = Boolean(m2[2]);
           const name = m2[3];
           if (!name) continue;
-          const startLine = linesBefore30(content, m2.index) + 1;
-          const params = parseParams27(m2[4] ?? "");
+          const startLine = linesBefore29(content, m2.index) + 1;
+          const params = parseParams26(m2[4] ?? "");
           const { body, endLine } = extractIndentedBody(lines, startLine - 1);
-          const calls = extractCalls30(body, name);
+          const calls = extractCalls29(body, name);
           const isTopLevel = indent === 0;
           functions.push({
             name,
@@ -9150,7 +10220,7 @@ var init_CrystalParser = __esm({
 
 // packages/core/src/parser/VimScriptParser.ts
 import path32 from "path";
-function linesBefore31(content, index) {
+function linesBefore30(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
 function findMatchingEndfunction(lines, startLine) {
@@ -9159,10 +10229,10 @@ function findMatchingEndfunction(lines, startLine) {
   }
   return lines.length - 1;
 }
-function parseParams28(raw) {
+function parseParams27(raw) {
   return raw.split(",").map((p2) => p2.trim()).filter((p2) => p2 && p2 !== "...");
 }
-function extractCalls31(body, selfName) {
+function extractCalls30(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+(?:#\w+)*)\s*\(/g;
   let m2;
@@ -9205,11 +10275,11 @@ var init_VimScriptParser = __esm({
           const isLocal = Boolean(m2[1]);
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore31(content, m2.index) + 1;
+          const startLine = linesBefore30(content, m2.index) + 1;
           const endLine = findMatchingEndfunction(lines, startLine - 1);
-          const params = parseParams28(m2[3] ?? "");
+          const params = parseParams27(m2[3] ?? "");
           const body = lines.slice(startLine - 1, endLine + 1).join("\n");
-          const calls = extractCalls31(body, name);
+          const calls = extractCalls30(body, name);
           const isExported = !isLocal;
           if (isExported) exports.push(name);
           functions.push({
@@ -9245,15 +10315,15 @@ var init_VimScriptParser = __esm({
 
 // packages/core/src/parser/EmacsLispParser.ts
 import path33 from "path";
-function linesBefore32(content, index) {
+function linesBefore31(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams29(body) {
+function parseParams28(body) {
   const match = /defun\s+[\w!?*+<>=/-]+\s*\(([^)]*)\)/.exec(body);
   if (!match?.[1]) return [];
   return match[1].split(/\s+/).filter((p2) => p2 && p2 !== "&optional" && p2 !== "&rest");
 }
-function extractCalls32(body, selfName) {
+function extractCalls31(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\(([\w!?*+<>=./-]+)/g;
   let m2;
@@ -9296,16 +10366,16 @@ var init_EmacsLispParser = __esm({
           const name = m2[1];
           if (!name) continue;
           const openParenIdx = content.lastIndexOf("(", m2.index);
-          const startLine = linesBefore32(content, openParenIdx) + 1;
+          const startLine = linesBefore31(content, openParenIdx) + 1;
           const { body, endLine } = extractFunctionBody(lines, startLine - 1, "(", ")");
-          const calls = extractCalls32(body, name);
+          const calls = extractCalls31(body, name);
           exports.push(name);
           functions.push({
             name,
             filePath,
             startLine,
             endLine: endLine + 1,
-            parameters: parseParams29(body),
+            parameters: parseParams28(body),
             isExported: true,
             // Emacs Lisp has no visibility modifier - any defun is callable once loaded
             isAsync: false,
@@ -9334,7 +10404,7 @@ var init_EmacsLispParser = __esm({
 
 // packages/core/src/parser/MakefileParser.ts
 import path34 from "path";
-function linesBefore33(content, index) {
+function linesBefore32(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
 function extractRecipeBody(lines, startLine) {
@@ -9350,7 +10420,7 @@ function extractRecipeBody(lines, startLine) {
   }
   return { body: lines.slice(startLine, endLine + 1).join("\n"), endLine };
 }
-function extractCalls33(body, deps) {
+function extractCalls32(body, deps) {
   const calls = new Set(deps);
   const pattern = /\$\(MAKE\)\s+([\w.%/-]+)|make\s+([\w.%/-]+)/g;
   let m2;
@@ -9387,7 +10457,7 @@ var init_MakefileParser = __esm({
         while ((m2 = targetPattern.exec(content)) !== null) {
           const name = m2[1];
           if (!name || name.startsWith(".")) continue;
-          const startLine = linesBefore33(content, m2.index) + 1;
+          const startLine = linesBefore32(content, m2.index) + 1;
           const { body, endLine } = extractRecipeBody(lines, startLine - 1);
           const deps = (m2[2] ?? "").trim().split(/\s+/).filter(Boolean);
           exports.push(name);
@@ -9400,7 +10470,7 @@ var init_MakefileParser = __esm({
             isExported: true,
             // every target is invokable via `make <target>`
             isAsync: false,
-            calls: extractCalls33(body, deps),
+            calls: extractCalls32(body, deps),
             complexity: calculateComplexity(body),
             lineCount: endLine - (startLine - 1) + 1,
             language: "makefile"
@@ -9425,7 +10495,7 @@ var init_MakefileParser = __esm({
 
 // packages/core/src/parser/DockerfileParser.ts
 import path35 from "path";
-function linesBefore34(content, index) {
+function linesBefore33(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
 var FROM_STMT, COPY_FROM, DockerfileParser;
@@ -9462,8 +10532,8 @@ var init_DockerfileParser = __esm({
           const current = fromMatches[i];
           if (!current) continue;
           const next = fromMatches[i + 1];
-          const startLine = linesBefore34(content, current.index) + 1;
-          const endLine = next ? linesBefore34(content, next.index) : lineCount;
+          const startLine = linesBefore33(content, current.index) + 1;
+          const endLine = next ? linesBefore33(content, next.index) : lineCount;
           const name = current.stage ?? `stage-${i}`;
           exports.push(name);
           classes.push({
@@ -9494,7 +10564,7 @@ var init_DockerfileParser = __esm({
 
 // packages/core/src/parser/TerraformParser.ts
 import path36 from "path";
-function linesBefore35(content, index) {
+function linesBefore34(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
 var BLOCK_DEF, MODULE_SOURCE, TerraformParser;
@@ -9521,7 +10591,7 @@ var init_TerraformParser = __esm({
           const label2 = m2[3];
           if (!kind || !label1) continue;
           const name = label2 ? `${label1}.${label2}` : label1;
-          const startLine = linesBefore35(content, m2.index) + 1;
+          const startLine = linesBefore34(content, m2.index) + 1;
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
           if (kind === "module") {
             const sourceMatch = MODULE_SOURCE.exec(body);
@@ -9559,10 +10629,10 @@ var init_TerraformParser = __esm({
 
 // packages/core/src/parser/SqlParser.ts
 import path37 from "path";
-function linesBefore36(content, index) {
+function linesBefore35(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams30(raw) {
+function parseParams29(raw) {
   return raw.split(",").map((p2) => p2.trim().split(/\s+/)[0]?.replace(/^(IN|OUT|INOUT)\s+/i, "") ?? "").filter(Boolean);
 }
 function findRoutineEnd(lines, startLine) {
@@ -9573,7 +10643,7 @@ function findRoutineEnd(lines, startLine) {
   }
   return lines.length - 1;
 }
-function extractCalls34(body, selfName) {
+function extractCalls33(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(\w+)\s*\(/g;
   let m2;
@@ -9615,8 +10685,8 @@ var init_SqlParser = __esm({
           if (!name) continue;
           const openParenIdx = content.indexOf("(", m2.index);
           if (openParenIdx === -1) continue;
-          const startLine = linesBefore36(content, m2.index) + 1;
-          const parenStartLine = linesBefore36(content, openParenIdx);
+          const startLine = linesBefore35(content, m2.index) + 1;
+          const parenStartLine = linesBefore35(content, openParenIdx);
           const { endLine } = extractFunctionBody(lines, parenStartLine, "(", ")");
           exports.push(name);
           classes.push({ name, filePath, startLine, endLine: endLine + 1, methods: [], isExported: true });
@@ -9625,8 +10695,8 @@ var init_SqlParser = __esm({
         while ((m2 = routinePattern.exec(content)) !== null) {
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore36(content, m2.index) + 1;
-          const params = parseParams30(m2[3] ?? "");
+          const startLine = linesBefore35(content, m2.index) + 1;
+          const params = parseParams29(m2[3] ?? "");
           const endLine = findRoutineEnd(lines, startLine - 1);
           const body = lines.slice(startLine - 1, endLine + 1).join("\n");
           exports.push(name);
@@ -9638,7 +10708,7 @@ var init_SqlParser = __esm({
             parameters: params,
             isExported: true,
             isAsync: false,
-            calls: extractCalls34(body, name),
+            calls: extractCalls33(body, name),
             complexity: calculateComplexity(body),
             lineCount: endLine - (startLine - 1) + 1,
             language: "sql"
@@ -9810,17 +10880,17 @@ var init_SvelteParser = __esm({
 
 // packages/core/src/parser/ProtobufParser.ts
 import path38 from "path";
-function linesBefore37(content, index) {
+function linesBefore36(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-var BLOCK_DEF2, RPC_DEF, IMPORT_STMT16, ProtobufParser;
+var BLOCK_DEF2, RPC_DEF, IMPORT_STMT15, ProtobufParser;
 var init_ProtobufParser = __esm({
   "packages/core/src/parser/ProtobufParser.ts"() {
     "use strict";
     init_BaseParser();
     BLOCK_DEF2 = /^(message|service|enum)\s+(\w+)\s*\{/gm;
     RPC_DEF = /^[ \t]*rpc\s+(\w+)\s*\(([^)]*)\)\s*returns\s*\(([^)]*)\)/gm;
-    IMPORT_STMT16 = /^import\s+(?:public\s+)?"([^"]+)"/gm;
+    IMPORT_STMT15 = /^import\s+(?:public\s+)?"([^"]+)"/gm;
     ProtobufParser = {
       language: "protobuf",
       extensions: [".proto"],
@@ -9832,7 +10902,7 @@ var init_ProtobufParser = __esm({
         const imports = [];
         const exports = [];
         let m2;
-        const importPattern = new RegExp(IMPORT_STMT16.source, "gm");
+        const importPattern = new RegExp(IMPORT_STMT15.source, "gm");
         while ((m2 = importPattern.exec(content)) !== null) {
           const src = m2[1] ?? "";
           imports.push({ source: src, symbols: [], isRelative: !src.includes("/") || src.startsWith(".") });
@@ -9842,7 +10912,7 @@ var init_ProtobufParser = __esm({
           const kind = m2[1];
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore37(content, m2.index) + 1;
+          const startLine = linesBefore36(content, m2.index) + 1;
           const { endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({
@@ -9860,7 +10930,7 @@ var init_ProtobufParser = __esm({
           const name = m2[1];
           if (!name) continue;
           const requestType = (m2[2] ?? "").replace(/^stream\s+/, "").trim();
-          const startLine = linesBefore37(content, m2.index) + 1;
+          const startLine = linesBefore36(content, m2.index) + 1;
           exports.push(name);
           functions.push({
             name,
@@ -9894,10 +10964,10 @@ var init_ProtobufParser = __esm({
 
 // packages/core/src/parser/GraphQLParser.ts
 import path39 from "path";
-function linesBefore38(content, index) {
+function linesBefore37(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function parseParams31(raw) {
+function parseParams30(raw) {
   return raw.split(",").map((p2) => p2.trim().split(/\s*:/)[0]?.trim() ?? "").filter(Boolean);
 }
 var TYPE_DEF, RESOLVER_FIELD, GraphQLParser;
@@ -9922,7 +10992,7 @@ var init_GraphQLParser = __esm({
           const kind = m2[1];
           const name = m2[2];
           if (!name) continue;
-          const startLine = linesBefore38(content, m2.index) + 1;
+          const startLine = linesBefore37(content, m2.index) + 1;
           const { body, endLine } = extractFunctionBody(lines, startLine - 1);
           exports.push(name);
           classes.push({
@@ -9939,14 +11009,14 @@ var init_GraphQLParser = __esm({
           while ((fm = fieldPattern.exec(body)) !== null) {
             const fieldName = fm[1];
             if (!fieldName) continue;
-            const fieldLine = startLine + linesBefore38(body, fm.index);
+            const fieldLine = startLine + linesBefore37(body, fm.index);
             exports.push(fieldName);
             functions.push({
               name: fieldName,
               filePath,
               startLine: fieldLine,
               endLine: fieldLine,
-              parameters: parseParams31(fm[2] ?? ""),
+              parameters: parseParams30(fm[2] ?? ""),
               isExported: true,
               isAsync: false,
               calls: [],
@@ -9974,10 +11044,10 @@ var init_GraphQLParser = __esm({
 
 // packages/core/src/parser/BatchParser.ts
 import path40 from "path";
-function linesBefore39(content, index) {
+function linesBefore38(content, index) {
   return content.slice(0, index).split("\n").length - 1;
 }
-function extractCalls35(body, selfName) {
+function extractCalls34(body, selfName) {
   const calls = /* @__PURE__ */ new Set();
   const pattern = /\b(?:call|goto)\s+:([\w-]+)/gi;
   let m2;
@@ -10021,8 +11091,8 @@ var init_BatchParser = __esm({
           const current = labelMatches[i];
           if (!current) continue;
           const next = labelMatches[i + 1];
-          const startLine = linesBefore39(content, current.index) + 1;
-          const endLine = next ? linesBefore39(content, next.index) : lineCount;
+          const startLine = linesBefore38(content, current.index) + 1;
+          const endLine = next ? linesBefore38(content, next.index) : lineCount;
           const body = lines.slice(startLine - 1, endLine).join("\n");
           functions.push({
             name: current.name,
@@ -10033,7 +11103,7 @@ var init_BatchParser = __esm({
             isExported: true,
             // every label is invokable via `call :Label` from anywhere in the script
             isAsync: false,
-            calls: extractCalls35(body, current.name),
+            calls: extractCalls34(body, current.name),
             complexity: calculateComplexity(body),
             lineCount: endLine - startLine + 1,
             language: "batch"
@@ -11041,6 +12111,1430 @@ var init_EntryPointDetector = __esm({
   }
 });
 
+// packages/core/src/analysis/jdkModel.ts
+var JDK_TYPES;
+var init_jdkModel = __esm({
+  "packages/core/src/analysis/jdkModel.ts"() {
+    "use strict";
+    JDK_TYPES = {
+      AbortPolicy: "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      AbstractCollection: "|Collection,Iterable,Object|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,forEach:void,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      AbstractDoubleSpliterator: "|Object,OfPrimitive,Spliterator,Spliterator.OfDouble|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfDouble",
+      AbstractExecutorService: "|AutoCloseable,Executor,ExecutorService,Object|awaitTermination:boolean,close:void,execute:void,invokeAll:List,invokeAny:?,isShutdown:boolean,isTerminated:boolean,shutdown:void,shutdownNow:List,submit:Future",
+      AbstractIntSpliterator: "|Object,OfPrimitive,Spliterator,Spliterator.OfInt|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfInt",
+      AbstractList: "|AbstractCollection,Collection,Iterable,List,Object,SequencedCollection|add:?,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,isEmpty:boolean,iterator:Iterator,lastIndexOf:int,listIterator:ListIterator,parallelStream:Stream,remove:?,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,replaceAll:void,retainAll:boolean,reversed:List,set:?,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?",
+      AbstractLongSpliterator: "|Object,OfPrimitive,Spliterator,Spliterator.OfLong|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfLong",
+      AbstractMap: "|Map,Object|clear:void,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,merge:?,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      "AbstractMap.SimpleEntry": "|Entry,Object,Serializable|getKey:?,getValue:?,setValue:?",
+      "AbstractMap.SimpleImmutableEntry": "|Entry,Object,Serializable|getKey:?,getValue:?,setValue:?",
+      AbstractMethodError: "|Error,IncompatibleClassChangeError,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      AbstractOwnableSynchronizer: "|Object,Serializable|",
+      AbstractQueue: "|AbstractCollection,Collection,Iterable,Object,Queue|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      AbstractQueuedLongSynchronizer: "|AbstractOwnableSynchronizer,Object,Serializable|acquire:void,acquireInterruptibly:void,acquireShared:void,acquireSharedInterruptibly:void,getExclusiveQueuedThreads:Collection,getFirstQueuedThread:Thread,getQueueLength:int,getQueuedThreads:Collection,getSharedQueuedThreads:Collection,getWaitQueueLength:int,getWaitingThreads:Collection,hasContended:boolean,hasQueuedPredecessors:boolean,hasQueuedThreads:boolean,hasWaiters:boolean,isQueued:boolean,owns:boolean,release:boolean,releaseShared:boolean,tryAcquireNanos:boolean,tryAcquireSharedNanos:boolean",
+      "AbstractQueuedLongSynchronizer.ConditionObject": "|Condition,Object,Serializable|await:?,awaitNanos:long,awaitUninterruptibly:void,awaitUntil:boolean,signal:void,signalAll:void",
+      AbstractQueuedSynchronizer: "|AbstractOwnableSynchronizer,Object,Serializable|acquire:void,acquireInterruptibly:void,acquireShared:void,acquireSharedInterruptibly:void,getExclusiveQueuedThreads:Collection,getFirstQueuedThread:Thread,getQueueLength:int,getQueuedThreads:Collection,getSharedQueuedThreads:Collection,getWaitQueueLength:int,getWaitingThreads:Collection,hasContended:boolean,hasQueuedPredecessors:boolean,hasQueuedThreads:boolean,hasWaiters:boolean,isQueued:boolean,owns:boolean,release:boolean,releaseShared:boolean,tryAcquireNanos:boolean,tryAcquireSharedNanos:boolean",
+      "AbstractQueuedSynchronizer.ConditionObject": "|Condition,Object,Serializable|await:?,awaitNanos:long,awaitUninterruptibly:void,awaitUntil:boolean,signal:void,signalAll:void",
+      AbstractSequentialList: "|AbstractCollection,AbstractList,Collection,Iterable,List,Object,SequencedCollection|add:?,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,isEmpty:boolean,iterator:Iterator,lastIndexOf:int,listIterator:ListIterator,parallelStream:Stream,remove:?,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,replaceAll:void,retainAll:boolean,reversed:List,set:?,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?",
+      AbstractSet: "|AbstractCollection,Collection,Iterable,Object,Set|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,forEach:void,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      AbstractSpliterator: "|Object,Spliterator|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator",
+      AccessDeniedException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      AccessMode: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:AccessMode[]",
+      Appendable: "i|Object|append:Appendable",
+      ArithmeticException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Array: "i|Object|free:void,getArray:Object,getBaseType:int,getBaseTypeName:String,getResultSet:ResultSet",
+      ArrayBlockingQueue: "|AbstractCollection,AbstractQueue,BlockingQueue,Collection,Iterable,Object,Queue,Serializable|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?",
+      ArrayDeque: "|AbstractCollection,Cloneable,Collection,Deque,Iterable,Object,Queue,SequencedCollection,Serializable|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,clone:ArrayDeque,contains:boolean,containsAll:boolean,descendingIterator:Iterator,element:?,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,offer:boolean,offerFirst:boolean,offerLast:boolean,parallelStream:Stream,peek:?,peekFirst:?,peekLast:?,poll:?,pollFirst:?,pollLast:?,pop:?,push:void,remove:?,removeAll:boolean,removeFirst:?,removeFirstOccurrence:boolean,removeIf:boolean,removeLast:?,removeLastOccurrence:boolean,retainAll:boolean,reversed:Deque,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      ArrayIndexOutOfBoundsException: "|Exception,IndexOutOfBoundsException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ArrayList: "|AbstractCollection,AbstractList,Cloneable,Collection,Iterable,List,Object,RandomAccess,SequencedCollection,Serializable|add:?,addAll:boolean,addFirst:void,addLast:void,clear:void,clone:Object,contains:boolean,containsAll:boolean,ensureCapacity:void,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,isEmpty:boolean,iterator:Iterator,lastIndexOf:int,listIterator:ListIterator,parallelStream:Stream,remove:?,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,replaceAll:void,retainAll:boolean,reversed:List,set:?,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?,trimToSize:void",
+      ArrayStoreException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Arrays: "f|Object|asList:List,binarySearch:int,compare:int,compareUnsigned:int,copyOf:?,copyOfRange:?,deepEquals:boolean,deepHashCode:int,deepToString:String,fill:void,mismatch:int,parallelPrefix:void,parallelSetAll:void,parallelSort:void,setAll:void,sort:void,spliterator:?,stream:?",
+      AssertionError: "|Error,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      AsynchronousCompletionTask: "i|Object|",
+      AtomicBoolean: "|Object,Serializable|compareAndExchange:boolean,compareAndExchangeAcquire:boolean,compareAndExchangeRelease:boolean,compareAndSet:boolean,get:boolean,getAcquire:boolean,getAndSet:boolean,getOpaque:boolean,getPlain:boolean,lazySet:void,set:void,setOpaque:void,setPlain:void,setRelease:void,weakCompareAndSet:boolean,weakCompareAndSetAcquire:boolean,weakCompareAndSetPlain:boolean,weakCompareAndSetRelease:boolean,weakCompareAndSetVolatile:boolean",
+      AtomicInteger: "|Number,Object,Serializable|accumulateAndGet:int,addAndGet:int,byteValue:byte,compareAndExchange:int,compareAndExchangeAcquire:int,compareAndExchangeRelease:int,compareAndSet:boolean,decrementAndGet:int,doubleValue:double,floatValue:float,get:int,getAcquire:int,getAndAccumulate:int,getAndAdd:int,getAndDecrement:int,getAndIncrement:int,getAndSet:int,getAndUpdate:int,getOpaque:int,getPlain:int,incrementAndGet:int,intValue:int,lazySet:void,longValue:long,set:void,setOpaque:void,setPlain:void,setRelease:void,shortValue:short,updateAndGet:int,weakCompareAndSet:boolean,weakCompareAndSetAcquire:boolean,weakCompareAndSetPlain:boolean,weakCompareAndSetRelease:boolean,weakCompareAndSetVolatile:boolean",
+      AtomicIntegerArray: "|Object,Serializable|accumulateAndGet:int,addAndGet:int,compareAndExchange:int,compareAndExchangeAcquire:int,compareAndExchangeRelease:int,compareAndSet:boolean,decrementAndGet:int,get:int,getAcquire:int,getAndAccumulate:int,getAndAdd:int,getAndDecrement:int,getAndIncrement:int,getAndSet:int,getAndUpdate:int,getOpaque:int,getPlain:int,incrementAndGet:int,lazySet:void,length:int,set:void,setOpaque:void,setPlain:void,setRelease:void,updateAndGet:int,weakCompareAndSet:boolean,weakCompareAndSetAcquire:boolean,weakCompareAndSetPlain:boolean,weakCompareAndSetRelease:boolean,weakCompareAndSetVolatile:boolean",
+      AtomicIntegerFieldUpdater: "|Object|accumulateAndGet:int,addAndGet:int,compareAndSet:boolean,decrementAndGet:int,get:int,getAndAccumulate:int,getAndAdd:int,getAndDecrement:int,getAndIncrement:int,getAndSet:int,getAndUpdate:int,incrementAndGet:int,lazySet:void,newUpdater:AtomicIntegerFieldUpdater,set:void,updateAndGet:int,weakCompareAndSet:boolean",
+      AtomicLong: "|Number,Object,Serializable|accumulateAndGet:long,addAndGet:long,byteValue:byte,compareAndExchange:long,compareAndExchangeAcquire:long,compareAndExchangeRelease:long,compareAndSet:boolean,decrementAndGet:long,doubleValue:double,floatValue:float,get:long,getAcquire:long,getAndAccumulate:long,getAndAdd:long,getAndDecrement:long,getAndIncrement:long,getAndSet:long,getAndUpdate:long,getOpaque:long,getPlain:long,incrementAndGet:long,intValue:int,lazySet:void,longValue:long,set:void,setOpaque:void,setPlain:void,setRelease:void,shortValue:short,updateAndGet:long,weakCompareAndSet:boolean,weakCompareAndSetAcquire:boolean,weakCompareAndSetPlain:boolean,weakCompareAndSetRelease:boolean,weakCompareAndSetVolatile:boolean",
+      AtomicLongArray: "|Object,Serializable|accumulateAndGet:long,addAndGet:long,compareAndExchange:long,compareAndExchangeAcquire:long,compareAndExchangeRelease:long,compareAndSet:boolean,decrementAndGet:long,get:long,getAcquire:long,getAndAccumulate:long,getAndAdd:long,getAndDecrement:long,getAndIncrement:long,getAndSet:long,getAndUpdate:long,getOpaque:long,getPlain:long,incrementAndGet:long,lazySet:void,length:int,set:void,setOpaque:void,setPlain:void,setRelease:void,updateAndGet:long,weakCompareAndSet:boolean,weakCompareAndSetAcquire:boolean,weakCompareAndSetPlain:boolean,weakCompareAndSetRelease:boolean,weakCompareAndSetVolatile:boolean",
+      AtomicLongFieldUpdater: "|Object|accumulateAndGet:long,addAndGet:long,compareAndSet:boolean,decrementAndGet:long,get:long,getAndAccumulate:long,getAndAdd:long,getAndDecrement:long,getAndIncrement:long,getAndSet:long,getAndUpdate:long,incrementAndGet:long,lazySet:void,newUpdater:AtomicLongFieldUpdater,set:void,updateAndGet:long,weakCompareAndSet:boolean",
+      AtomicMarkableReference: "|Object|attemptMark:boolean,compareAndSet:boolean,get:?,getReference:?,isMarked:boolean,set:void,weakCompareAndSet:boolean",
+      AtomicMoveNotSupportedException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      AtomicReference: "|Object,Serializable|accumulateAndGet:?,compareAndExchange:?,compareAndExchangeAcquire:?,compareAndExchangeRelease:?,compareAndSet:boolean,get:?,getAcquire:?,getAndAccumulate:?,getAndSet:?,getAndUpdate:?,getOpaque:?,getPlain:?,lazySet:void,set:void,setOpaque:void,setPlain:void,setRelease:void,updateAndGet:?,weakCompareAndSet:boolean,weakCompareAndSetAcquire:boolean,weakCompareAndSetPlain:boolean,weakCompareAndSetRelease:boolean,weakCompareAndSetVolatile:boolean",
+      AtomicReferenceArray: "|Object,Serializable|accumulateAndGet:?,compareAndExchange:?,compareAndExchangeAcquire:?,compareAndExchangeRelease:?,compareAndSet:boolean,get:?,getAcquire:?,getAndAccumulate:?,getAndSet:?,getAndUpdate:?,getOpaque:?,getPlain:?,lazySet:void,length:int,set:void,setOpaque:void,setPlain:void,setRelease:void,updateAndGet:?,weakCompareAndSet:boolean,weakCompareAndSetAcquire:boolean,weakCompareAndSetPlain:boolean,weakCompareAndSetRelease:boolean,weakCompareAndSetVolatile:boolean",
+      AtomicReferenceFieldUpdater: "|Object|accumulateAndGet:?,compareAndSet:boolean,get:?,getAndAccumulate:?,getAndSet:?,getAndUpdate:?,lazySet:void,newUpdater:AtomicReferenceFieldUpdater,set:void,updateAndGet:?,weakCompareAndSet:boolean",
+      AtomicStampedReference: "|Object|attemptStamp:boolean,compareAndSet:boolean,get:?,getReference:?,getStamp:int,set:void,weakCompareAndSet:boolean",
+      AutoCloseable: "i|Object|close:void",
+      Base64: "f|Object|getDecoder:Decoder,getEncoder:Encoder,getMimeDecoder:Decoder,getMimeEncoder:Encoder,getUrlDecoder:Decoder,getUrlEncoder:Encoder",
+      "Base64.Decoder": "|Object|decode:?,wrap:InputStream",
+      "Base64.Encoder": "|Object|encode:?,encodeToString:String,withoutPadding:Encoder,wrap:OutputStream",
+      BaseStream: "i|AutoCloseable,Object|close:void,isParallel:boolean,iterator:Iterator,onClose:?,parallel:?,sequential:?,spliterator:Spliterator,unordered:?",
+      BatchUpdateException: "|Exception,Iterable,Object,SQLException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLargeUpdateCounts:long[],getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],getUpdateCounts:int[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      BiConsumer: "i|Object|accept:void,andThen:BiConsumer",
+      BiFunction: "i|Object|andThen:BiFunction,apply:?",
+      BiPredicate: "i|Object|and:BiPredicate,negate:BiPredicate,or:BiPredicate,test:boolean",
+      BigDecimal: "|Comparable,Number,Object,Serializable|abs:BigDecimal,add:BigDecimal,byteValue:byte,byteValueExact:byte,compareTo:int,divide:BigDecimal,divideAndRemainder:BigDecimal[],divideToIntegralValue:BigDecimal,doubleValue:double,floatValue:float,intValue:int,intValueExact:int,longValue:long,longValueExact:long,max:BigDecimal,min:BigDecimal,movePointLeft:BigDecimal,movePointRight:BigDecimal,multiply:BigDecimal,negate:BigDecimal,plus:BigDecimal,pow:BigDecimal,precision:int,remainder:BigDecimal,round:BigDecimal,scale:int,scaleByPowerOfTen:BigDecimal,setScale:BigDecimal,shortValue:short,shortValueExact:short,signum:int,sqrt:BigDecimal,stripTrailingZeros:BigDecimal,subtract:BigDecimal,toBigInteger:BigInteger,toBigIntegerExact:BigInteger,toEngineeringString:String,toPlainString:String,ulp:BigDecimal,unscaledValue:BigInteger,valueOf:BigDecimal",
+      BigDecimalLayoutForm: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:BigDecimalLayoutForm[]",
+      BigInteger: "|Comparable,Number,Object,Serializable|abs:BigInteger,add:BigInteger,and:BigInteger,andNot:BigInteger,bitCount:int,bitLength:int,byteValue:byte,byteValueExact:byte,clearBit:BigInteger,compareTo:int,divide:BigInteger,divideAndRemainder:BigInteger[],doubleValue:double,flipBit:BigInteger,floatValue:float,gcd:BigInteger,getLowestSetBit:int,intValue:int,intValueExact:int,isProbablePrime:boolean,longValue:long,longValueExact:long,max:BigInteger,min:BigInteger,mod:BigInteger,modInverse:BigInteger,modPow:BigInteger,multiply:BigInteger,negate:BigInteger,nextProbablePrime:BigInteger,not:BigInteger,or:BigInteger,parallelMultiply:BigInteger,pow:BigInteger,probablePrime:BigInteger,remainder:BigInteger,setBit:BigInteger,shiftLeft:BigInteger,shiftRight:BigInteger,shortValue:short,shortValueExact:short,signum:int,sqrt:BigInteger,sqrtAndRemainder:BigInteger[],subtract:BigInteger,testBit:boolean,toByteArray:byte[],valueOf:BigInteger,xor:BigInteger",
+      BinaryOperator: "i|BiFunction,Object|andThen:BiFunction,apply:?,maxBy:BinaryOperator,minBy:BinaryOperator",
+      BitSet: "|Cloneable,Object,Serializable|and:void,andNot:void,cardinality:int,clear:void,clone:Object,flip:void,get:?,intersects:boolean,isEmpty:boolean,length:int,nextClearBit:int,nextSetBit:int,or:void,previousClearBit:int,previousSetBit:int,set:void,size:int,stream:IntStream,toByteArray:byte[],toLongArray:long[],valueOf:BitSet,xor:void",
+      Blob: "i|Object|free:void,getBinaryStream:InputStream,getBytes:byte[],length:long,position:long,setBinaryStream:OutputStream,setBytes:int,truncate:void",
+      BlockingDeque: "i|BlockingQueue,Collection,Deque,Iterable,Object,Queue,SequencedCollection|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,descendingIterator:Iterator,drainTo:int,element:?,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,offer:boolean,offerFirst:boolean,offerLast:boolean,parallelStream:Stream,peek:?,peekFirst:?,peekLast:?,poll:?,pollFirst:?,pollLast:?,pop:?,push:void,put:void,putFirst:void,putLast:void,remainingCapacity:int,remove:?,removeAll:boolean,removeFirst:?,removeFirstOccurrence:boolean,removeIf:boolean,removeLast:?,removeLastOccurrence:boolean,retainAll:boolean,reversed:Deque,size:int,spliterator:Spliterator,stream:Stream,take:?,takeFirst:?,takeLast:?,toArray:?",
+      BlockingQueue: "i|Collection,Iterable,Object,Queue|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?",
+      Boolean: "f|Comparable,Constable,Object,Serializable|booleanValue:boolean,compare:int,compareTo:int,describeConstable:Optional,getBoolean:boolean,logicalAnd:boolean,logicalOr:boolean,logicalXor:boolean,parseBoolean:boolean,valueOf:Boolean",
+      BooleanSupplier: "i|Object|getAsBoolean:boolean",
+      BootstrapMethodError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      BrokenBarrierException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Buffer: "|Object|array:Object,arrayOffset:int,capacity:int,clear:Buffer,duplicate:Buffer,flip:Buffer,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isReadOnly:boolean,limit:?,mark:Buffer,position:?,remaining:int,reset:Buffer,rewind:Buffer,slice:Buffer",
+      BufferOverflowException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      BufferUnderflowException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      BufferedInputStream: "|AutoCloseable,Closeable,FilterInputStream,InputStream,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      BufferedOutputStream: "|AutoCloseable,Closeable,FilterOutputStream,Flushable,Object,OutputStream|close:void,flush:void,nullOutputStream:OutputStream,write:void",
+      BufferedReader: "|AutoCloseable,Closeable,Object,Readable,Reader|close:void,lines:Stream,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,readLine:String,ready:boolean,reset:void,skip:long,transferTo:long",
+      BufferedWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,Writer|append:Writer,close:void,flush:void,newLine:void,nullWriter:Writer,write:void",
+      Builder: "i|Object|factory:ThreadFactory,inheritInheritableThreadLocals:Builder,name:Builder,start:Thread,uncaughtExceptionHandler:Builder,unstarted:Thread",
+      Byte: "f|Comparable,Constable,Number,Object,Serializable|byteValue:byte,compare:int,compareTo:int,compareUnsigned:int,decode:Byte,describeConstable:Optional,doubleValue:double,floatValue:float,intValue:int,longValue:long,parseByte:byte,shortValue:short,toUnsignedInt:int,toUnsignedLong:long,valueOf:Byte",
+      ByteArrayInputStream: "|AutoCloseable,Closeable,InputStream,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      ByteArrayOutputStream: "|AutoCloseable,Closeable,Flushable,Object,OutputStream|close:void,flush:void,nullOutputStream:OutputStream,reset:void,size:int,toByteArray:byte[],write:void,writeBytes:void,writeTo:void",
+      ByteBuffer: "|Buffer,Comparable,Object|alignedSlice:ByteBuffer,alignmentOffset:int,allocate:ByteBuffer,allocateDirect:ByteBuffer,array:byte[],arrayOffset:int,asCharBuffer:CharBuffer,asDoubleBuffer:DoubleBuffer,asFloatBuffer:FloatBuffer,asIntBuffer:IntBuffer,asLongBuffer:LongBuffer,asReadOnlyBuffer:ByteBuffer,asShortBuffer:ShortBuffer,capacity:int,clear:ByteBuffer,compact:ByteBuffer,compareTo:int,duplicate:ByteBuffer,flip:ByteBuffer,get:?,getChar:char,getDouble:double,getFloat:float,getInt:int,getLong:long,getShort:short,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isReadOnly:boolean,limit:?,mark:ByteBuffer,mismatch:int,order:?,position:?,put:ByteBuffer,putChar:ByteBuffer,putDouble:ByteBuffer,putFloat:ByteBuffer,putInt:ByteBuffer,putLong:ByteBuffer,putShort:ByteBuffer,remaining:int,reset:ByteBuffer,rewind:ByteBuffer,slice:ByteBuffer,wrap:ByteBuffer",
+      ByteOrder: "f|Object|nativeOrder:ByteOrder",
+      Calendar: "|Cloneable,Comparable,Object,Serializable|add:void,after:boolean,before:boolean,clear:void,clone:Object,compareTo:int,get:int,getActualMaximum:int,getActualMinimum:int,getAvailableCalendarTypes:Set,getAvailableLocales:Locale[],getCalendarType:String,getDisplayName:String,getDisplayNames:Map,getFirstDayOfWeek:int,getGreatestMinimum:int,getInstance:Calendar,getLeastMaximum:int,getMaximum:int,getMinimalDaysInFirstWeek:int,getMinimum:int,getTime:Date,getTimeInMillis:long,getTimeZone:TimeZone,getWeekYear:int,getWeeksInWeekYear:int,isLenient:boolean,isSet:boolean,isWeekDateSupported:boolean,roll:void,set:void,setFirstDayOfWeek:void,setLenient:void,setMinimalDaysInFirstWeek:void,setTime:void,setTimeInMillis:void,setTimeZone:void,setWeekDate:void,toInstant:Instant",
+      "Calendar.Builder": "|Object|build:Calendar,set:Calendar.Builder,setCalendarType:Calendar.Builder,setDate:Calendar.Builder,setFields:Calendar.Builder,setInstant:Calendar.Builder,setLenient:Calendar.Builder,setLocale:Calendar.Builder,setTimeOfDay:Calendar.Builder,setTimeZone:Calendar.Builder,setWeekDate:Calendar.Builder,setWeekDefinition:Calendar.Builder",
+      Callable: "i|Object|call:?",
+      CallableOp: "i|Object|call:?",
+      CallableStatement: "i|AutoCloseable,Object,PreparedStatement,Statement,Wrapper|addBatch:void,cancel:void,clearBatch:void,clearParameters:void,clearWarnings:void,close:void,closeOnCompletion:void,enquoteIdentifier:String,enquoteLiteral:String,enquoteNCharLiteral:String,execute:boolean,executeBatch:int[],executeLargeBatch:long[],executeLargeUpdate:long,executeQuery:ResultSet,executeUpdate:int,getArray:Array,getBigDecimal:BigDecimal,getBlob:Blob,getBoolean:boolean,getByte:byte,getBytes:byte[],getCharacterStream:Reader,getClob:Clob,getConnection:Connection,getDate:?,getDouble:double,getFetchDirection:int,getFetchSize:int,getFloat:float,getGeneratedKeys:ResultSet,getInt:int,getLargeMaxRows:long,getLargeUpdateCount:long,getLong:long,getMaxFieldSize:int,getMaxRows:int,getMetaData:ResultSetMetaData,getMoreResults:boolean,getNCharacterStream:Reader,getNClob:NClob,getNString:String,getObject:?,getParameterMetaData:ParameterMetaData,getQueryTimeout:int,getRef:Ref,getResultSet:ResultSet,getResultSetConcurrency:int,getResultSetHoldability:int,getResultSetType:int,getRowId:RowId,getSQLXML:SQLXML,getShort:short,getString:String,getTime:Time,getTimestamp:Timestamp,getURL:URL,getUpdateCount:int,getWarnings:SQLWarning,isCloseOnCompletion:boolean,isClosed:boolean,isPoolable:boolean,isSimpleIdentifier:boolean,isWrapperFor:boolean,registerOutParameter:void,setArray:void,setAsciiStream:void,setBigDecimal:void,setBinaryStream:void,setBlob:void,setBoolean:void,setByte:void,setBytes:void,setCharacterStream:void,setClob:void,setCursorName:void,setDate:void,setDouble:void,setEscapeProcessing:void,setFetchDirection:void,setFetchSize:void,setFloat:void,setInt:void,setLargeMaxRows:void,setLong:void,setMaxFieldSize:void,setMaxRows:void,setNCharacterStream:void,setNClob:void,setNString:void,setNull:void,setObject:void,setPoolable:void,setQueryTimeout:void,setRef:void,setRowId:void,setSQLXML:void,setShort:void,setString:void,setTime:void,setTimestamp:void,setURL:void,setUnicodeStream:void,unwrap:?,wasNull:boolean",
+      CallerRunsPolicy: "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      CancellationException: "|Exception,IllegalStateException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Carrier: "f|Object|call:?,get:?,run:void,where:Carrier",
+      Category: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Category[]",
+      CharArrayReader: "|AutoCloseable,Closeable,Object,Readable,Reader|close:void,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long",
+      CharArrayWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,Writer|append:CharArrayWriter,close:void,flush:void,nullWriter:Writer,reset:void,size:int,toCharArray:char[],write:void,writeTo:void",
+      CharBuffer: "|Appendable,Buffer,CharSequence,Comparable,Object,Readable|allocate:CharBuffer,append:CharBuffer,array:char[],arrayOffset:int,asReadOnlyBuffer:CharBuffer,capacity:int,charAt:char,chars:IntStream,clear:CharBuffer,codePoints:IntStream,compact:CharBuffer,compareTo:int,duplicate:CharBuffer,flip:CharBuffer,get:?,getChars:void,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isEmpty:boolean,isReadOnly:boolean,length:int,limit:?,mark:CharBuffer,mismatch:int,order:ByteOrder,position:?,put:CharBuffer,read:int,remaining:int,reset:CharBuffer,rewind:CharBuffer,slice:CharBuffer,subSequence:CharBuffer,wrap:CharBuffer",
+      CharConversionException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      CharSequence: "i|Object|charAt:char,chars:IntStream,codePoints:IntStream,compare:int,getChars:void,isEmpty:boolean,length:int,subSequence:CharSequence",
+      Character: "f|Comparable,Constable,Object,Serializable|charCount:int,charValue:char,codePointAt:int,codePointBefore:int,codePointCount:int,codePointOf:int,compare:int,compareTo:int,describeConstable:Optional,digit:int,forDigit:char,getDirectionality:byte,getName:String,getNumericValue:int,getType:int,highSurrogate:char,isAlphabetic:boolean,isBmpCodePoint:boolean,isDefined:boolean,isDigit:boolean,isEmoji:boolean,isEmojiComponent:boolean,isEmojiModifier:boolean,isEmojiModifierBase:boolean,isEmojiPresentation:boolean,isExtendedPictographic:boolean,isHighSurrogate:boolean,isISOControl:boolean,isIdentifierIgnorable:boolean,isIdeographic:boolean,isJavaIdentifierPart:boolean,isJavaIdentifierStart:boolean,isJavaLetter:boolean,isJavaLetterOrDigit:boolean,isLetter:boolean,isLetterOrDigit:boolean,isLowSurrogate:boolean,isLowerCase:boolean,isMirrored:boolean,isSpace:boolean,isSpaceChar:boolean,isSupplementaryCodePoint:boolean,isSurrogate:boolean,isSurrogatePair:boolean,isTitleCase:boolean,isUnicodeIdentifierPart:boolean,isUnicodeIdentifierStart:boolean,isUpperCase:boolean,isValidCodePoint:boolean,isWhitespace:boolean,lowSurrogate:char,offsetByCodePoints:int,reverseBytes:char,toChars:?,toCodePoint:int,toLowerCase:?,toTitleCase:?,toUpperCase:?,valueOf:Character",
+      "Character.Subset": "|Object|",
+      "Character.UnicodeBlock": "f|Object,Subset|forName:UnicodeBlock,of:UnicodeBlock",
+      "Character.UnicodeScript": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,forName:UnicodeScript,getDeclaringClass:Class,name:String,of:UnicodeScript,ordinal:int,valueOf:?,values:UnicodeScript[]",
+      CharacterCodingException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Characteristics: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Characteristics[]",
+      Charset: "|Comparable,Object|aliases:Set,availableCharsets:SortedMap,canEncode:boolean,compareTo:int,contains:boolean,decode:CharBuffer,defaultCharset:Charset,displayName:String,encode:ByteBuffer,forName:Charset,isRegistered:boolean,isSupported:boolean,name:String,newDecoder:CharsetDecoder,newEncoder:CharsetEncoder",
+      CharsetDecoder: "|Object|averageCharsPerByte:float,charset:Charset,decode:?,detectedCharset:Charset,flush:CoderResult,isAutoDetecting:boolean,isCharsetDetected:boolean,malformedInputAction:CodingErrorAction,maxCharsPerByte:float,onMalformedInput:CharsetDecoder,onUnmappableCharacter:CharsetDecoder,replaceWith:CharsetDecoder,replacement:String,reset:CharsetDecoder,unmappableCharacterAction:CodingErrorAction",
+      CharsetEncoder: "|Object|averageBytesPerChar:float,canEncode:boolean,charset:Charset,encode:?,flush:CoderResult,isLegalReplacement:boolean,malformedInputAction:CodingErrorAction,maxBytesPerChar:float,onMalformedInput:CharsetEncoder,onUnmappableCharacter:CharsetEncoder,replaceWith:CharsetEncoder,replacement:byte[],reset:CharsetEncoder,unmappableCharacterAction:CodingErrorAction",
+      ChronoField: "f|Comparable,Constable,Enum,Object,Serializable,TemporalField|adjustInto:?,checkValidIntValue:int,checkValidValue:long,compareTo:int,describeConstable:Optional,getBaseUnit:TemporalUnit,getDeclaringClass:Class,getDisplayName:String,getFrom:long,getRangeUnit:TemporalUnit,isDateBased:boolean,isSupportedBy:boolean,isTimeBased:boolean,name:String,ordinal:int,range:ValueRange,rangeRefinedBy:ValueRange,resolve:TemporalAccessor,valueOf:?,values:ChronoField[]",
+      ChronoUnit: "f|Comparable,Constable,Enum,Object,Serializable,TemporalUnit|addTo:?,between:long,compareTo:int,describeConstable:Optional,getDeclaringClass:Class,getDuration:Duration,isDateBased:boolean,isDurationEstimated:boolean,isSupportedBy:boolean,isTimeBased:boolean,name:String,ordinal:int,valueOf:?,values:ChronoUnit[]",
+      Class: "f|AnnotatedElement,Constable,GenericDeclaration,Object,OfField,Serializable,TypeDescriptor|accessFlags:Set,arrayType:Class,asSubclass:Class,cast:?,componentType:Class,describeConstable:Optional,descriptorString:String,desiredAssertionStatus:boolean,forName:Class,forPrimitiveName:Class,getAnnotatedInterfaces:AnnotatedType[],getAnnotatedSuperclass:AnnotatedType,getAnnotation:?,getAnnotations:Annotation[],getAnnotationsByType:?,getCanonicalName:String,getClassLoader:ClassLoader,getClasses:Class[],getComponentType:Class,getConstructor:Constructor,getConstructors:Constructor[],getDeclaredAnnotation:?,getDeclaredAnnotations:Annotation[],getDeclaredAnnotationsByType:?,getDeclaredClasses:Class[],getDeclaredConstructor:Constructor,getDeclaredConstructors:Constructor[],getDeclaredField:Field,getDeclaredFields:Field[],getDeclaredMethod:Method,getDeclaredMethods:Method[],getDeclaringClass:Class,getEnclosingClass:Class,getEnclosingConstructor:Constructor,getEnclosingMethod:Method,getEnumConstants:?,getField:Field,getFields:Field[],getGenericInterfaces:?,getGenericSuperclass:?,getInterfaces:Class[],getMethod:Method,getMethods:Method[],getModifiers:int,getModule:Module,getName:String,getNestHost:Class,getNestMembers:Class[],getPackage:Package,getPackageName:String,getPermittedSubclasses:Class[],getProtectionDomain:ProtectionDomain,getRecordComponents:RecordComponent[],getResource:URL,getResourceAsStream:InputStream,getSigners:Object[],getSimpleName:String,getSuperclass:Class,getTypeName:String,getTypeParameters:TypeVariable[],isAnnotation:boolean,isAnnotationPresent:boolean,isAnonymousClass:boolean,isArray:boolean,isAssignableFrom:boolean,isEnum:boolean,isHidden:boolean,isInstance:boolean,isInterface:boolean,isLocalClass:boolean,isMemberClass:boolean,isNestmateOf:boolean,isPrimitive:boolean,isRecord:boolean,isSealed:boolean,isSynthetic:boolean,newInstance:?,toGenericString:String",
+      ClassCastException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ClassCircularityError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ClassFormatError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ClassLoader: "|Object|clearAssertionStatus:void,getDefinedPackage:Package,getDefinedPackages:Package[],getName:String,getParent:ClassLoader,getPlatformClassLoader:ClassLoader,getResource:URL,getResourceAsStream:InputStream,getResources:Enumeration,getSystemClassLoader:ClassLoader,getSystemResource:URL,getSystemResourceAsStream:InputStream,getSystemResources:Enumeration,getUnnamedModule:Module,isRegisteredAsParallelCapable:boolean,loadClass:Class,resources:Stream,setClassAssertionStatus:void,setDefaultAssertionStatus:void,setPackageAssertionStatus:void",
+      ClassNotFoundException: "|Exception,Object,ReflectiveOperationException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getException:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ClassValue: "|Object|get:?,remove:void",
+      ClientInfoStatus: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:ClientInfoStatus[]",
+      Clob: "i|Object|free:void,getAsciiStream:InputStream,getCharacterStream:Reader,getSubString:String,length:long,position:long,setAsciiStream:OutputStream,setCharacterStream:Writer,setString:int,truncate:void",
+      Clock: "|InstantSource,Object|fixed:Clock,getZone:ZoneId,instant:Instant,millis:long,offset:Clock,system:Clock,systemDefaultZone:Clock,systemUTC:Clock,tick:Clock,tickMillis:Clock,tickMinutes:Clock,tickSeconds:Clock,withZone:Clock",
+      CloneNotSupportedException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Cloneable: "i|Object|",
+      Closeable: "i|AutoCloseable,Object|close:void",
+      ClosedDirectoryStreamException: "|Exception,IllegalStateException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ClosedFileSystemException: "|Exception,IllegalStateException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ClosedWatchServiceException: "|Exception,IllegalStateException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      CoderMalfunctionError: "|Error,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      CoderResult: "f|Object|isError:boolean,isMalformed:boolean,isOverflow:boolean,isUnderflow:boolean,isUnmappable:boolean,length:int,malformedForLength:CoderResult,throwException:void,unmappableForLength:CoderResult",
+      CodingErrorAction: "f|Object|",
+      Collection: "i|Iterable,Object|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,forEach:void,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Collections: "f|Object|addAll:boolean,asLifoQueue:Queue,binarySearch:int,checkedCollection:Collection,checkedList:List,checkedMap:Map,checkedNavigableMap:NavigableMap,checkedNavigableSet:NavigableSet,checkedQueue:Queue,checkedSet:Set,checkedSortedMap:SortedMap,checkedSortedSet:SortedSet,copy:void,disjoint:boolean,emptyEnumeration:Enumeration,emptyIterator:Iterator,emptyList:List,emptyListIterator:ListIterator,emptyMap:Map,emptyNavigableMap:NavigableMap,emptyNavigableSet:NavigableSet,emptySet:Set,emptySortedMap:SortedMap,emptySortedSet:SortedSet,enumeration:Enumeration,fill:void,frequency:int,indexOfSubList:int,lastIndexOfSubList:int,list:ArrayList,max:?,min:?,nCopies:List,newSequencedSetFromMap:SequencedSet,newSetFromMap:Set,replaceAll:boolean,reverse:void,reverseOrder:Comparator,rotate:void,shuffle:void,singleton:Set,singletonList:List,singletonMap:Map,sort:void,swap:void,synchronizedCollection:Collection,synchronizedList:List,synchronizedMap:Map,synchronizedNavigableMap:NavigableMap,synchronizedNavigableSet:NavigableSet,synchronizedSet:Set,synchronizedSortedMap:SortedMap,synchronizedSortedSet:SortedSet,unmodifiableCollection:Collection,unmodifiableList:List,unmodifiableMap:Map,unmodifiableNavigableMap:NavigableMap,unmodifiableNavigableSet:NavigableSet,unmodifiableSequencedCollection:SequencedCollection,unmodifiableSequencedMap:SequencedMap,unmodifiableSequencedSet:SequencedSet,unmodifiableSet:Set,unmodifiableSortedMap:SortedMap,unmodifiableSortedSet:SortedSet",
+      Collector: "i|Object|accumulator:BiConsumer,characteristics:Set,combiner:BinaryOperator,finisher:Function,of:Collector,supplier:Supplier",
+      "Collector.Characteristics": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Characteristics[]",
+      Collectors: "f|Object|averagingDouble:Collector,averagingInt:Collector,averagingLong:Collector,collectingAndThen:Collector,counting:Collector,filtering:Collector,flatMapping:Collector,groupingBy:Collector,groupingByConcurrent:Collector,joining:Collector,mapping:Collector,maxBy:Collector,minBy:Collector,partitioningBy:Collector,reducing:Collector,summarizingDouble:Collector,summarizingInt:Collector,summarizingLong:Collector,summingDouble:Collector,summingInt:Collector,summingLong:Collector,teeing:Collector,toCollection:Collector,toConcurrentMap:Collector,toList:Collector,toMap:Collector,toSet:Collector,toUnmodifiableList:Collector,toUnmodifiableMap:Collector,toUnmodifiableSet:Collector",
+      Comparable: "i|Object|compareTo:int",
+      Comparator: "i|Object|compare:int,comparing:Comparator,comparingDouble:Comparator,comparingInt:Comparator,comparingLong:Comparator,naturalOrder:Comparator,nullsFirst:Comparator,nullsLast:Comparator,reverseOrder:Comparator,reversed:Comparator,thenComparing:Comparator,thenComparingDouble:Comparator,thenComparingInt:Comparator,thenComparingLong:Comparator",
+      CompletableFuture: "|CompletionStage,Future,Object|acceptEither:CompletableFuture,acceptEitherAsync:CompletableFuture,allOf:CompletableFuture,anyOf:CompletableFuture,applyToEither:CompletableFuture,applyToEitherAsync:CompletableFuture,cancel:boolean,complete:boolean,completeAsync:CompletableFuture,completeExceptionally:boolean,completeOnTimeout:CompletableFuture,completedFuture:CompletableFuture,completedStage:CompletionStage,copy:CompletableFuture,defaultExecutor:Executor,delayedExecutor:Executor,exceptionNow:Throwable,exceptionally:CompletableFuture,exceptionallyAsync:CompletableFuture,exceptionallyCompose:CompletableFuture,exceptionallyComposeAsync:CompletableFuture,failedFuture:CompletableFuture,failedStage:CompletionStage,get:?,getNow:?,getNumberOfDependents:int,handle:CompletableFuture,handleAsync:CompletableFuture,isCancelled:boolean,isCompletedExceptionally:boolean,isDone:boolean,join:?,minimalCompletionStage:CompletionStage,newIncompleteFuture:CompletableFuture,obtrudeException:void,obtrudeValue:void,orTimeout:CompletableFuture,resultNow:?,runAfterBoth:CompletableFuture,runAfterBothAsync:CompletableFuture,runAfterEither:CompletableFuture,runAfterEitherAsync:CompletableFuture,runAsync:CompletableFuture,state:Future.State,supplyAsync:CompletableFuture,thenAccept:CompletableFuture,thenAcceptAsync:CompletableFuture,thenAcceptBoth:CompletableFuture,thenAcceptBothAsync:CompletableFuture,thenApply:CompletableFuture,thenApplyAsync:CompletableFuture,thenCombine:CompletableFuture,thenCombineAsync:CompletableFuture,thenCompose:CompletableFuture,thenComposeAsync:CompletableFuture,thenRun:CompletableFuture,thenRunAsync:CompletableFuture,toCompletableFuture:CompletableFuture,whenComplete:CompletableFuture,whenCompleteAsync:CompletableFuture",
+      "CompletableFuture.AsynchronousCompletionTask": "i|Object|",
+      CompletionException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      CompletionService: "i|Object|poll:Future,submit:Future,take:Future",
+      CompletionStage: "i|Object|acceptEither:CompletionStage,acceptEitherAsync:CompletionStage,applyToEither:CompletionStage,applyToEitherAsync:CompletionStage,exceptionally:CompletionStage,exceptionallyAsync:CompletionStage,exceptionallyCompose:CompletionStage,exceptionallyComposeAsync:CompletionStage,handle:CompletionStage,handleAsync:CompletionStage,runAfterBoth:CompletionStage,runAfterBothAsync:CompletionStage,runAfterEither:CompletionStage,runAfterEitherAsync:CompletionStage,thenAccept:CompletionStage,thenAcceptAsync:CompletionStage,thenAcceptBoth:CompletionStage,thenAcceptBothAsync:CompletionStage,thenApply:CompletionStage,thenApplyAsync:CompletionStage,thenCombine:CompletionStage,thenCombineAsync:CompletionStage,thenCompose:CompletionStage,thenComposeAsync:CompletionStage,thenRun:CompletionStage,thenRunAsync:CompletionStage,toCompletableFuture:CompletableFuture,whenComplete:CompletionStage,whenCompleteAsync:CompletionStage",
+      ConcurrentHashMap: "|AbstractMap,ConcurrentMap,Map,Object,Serializable|clear:void,compute:?,computeIfAbsent:?,computeIfPresent:?,contains:boolean,containsKey:boolean,containsValue:boolean,elements:Enumeration,entrySet:Set,forEach:void,forEachEntry:void,forEachKey:void,forEachValue:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:KeySetView,keys:Enumeration,mappingCount:long,merge:?,newKeySet:KeySetView,put:?,putAll:void,putIfAbsent:?,reduce:?,reduceEntries:?,reduceEntriesToDouble:double,reduceEntriesToInt:int,reduceEntriesToLong:long,reduceKeys:?,reduceKeysToDouble:double,reduceKeysToInt:int,reduceKeysToLong:long,reduceToDouble:double,reduceToInt:int,reduceToLong:long,reduceValues:?,reduceValuesToDouble:double,reduceValuesToInt:int,reduceValuesToLong:long,remove:?,replace:?,replaceAll:void,search:?,searchEntries:?,searchKeys:?,searchValues:?,size:int,values:Collection",
+      "ConcurrentHashMap.KeySetView": "f|Collection,Iterable,Object,Serializable,Set|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,forEach:void,getMap:ConcurrentHashMap,getMappedValue:?,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      ConcurrentLinkedDeque: "|AbstractCollection,Collection,Deque,Iterable,Object,Queue,SequencedCollection,Serializable|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,descendingIterator:Iterator,element:?,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,offer:boolean,offerFirst:boolean,offerLast:boolean,parallelStream:Stream,peek:?,peekFirst:?,peekLast:?,poll:?,pollFirst:?,pollLast:?,pop:?,push:void,remove:?,removeAll:boolean,removeFirst:?,removeFirstOccurrence:boolean,removeIf:boolean,removeLast:?,removeLastOccurrence:boolean,retainAll:boolean,reversed:Deque,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      ConcurrentLinkedQueue: "|AbstractCollection,AbstractQueue,Collection,Iterable,Object,Queue,Serializable|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      ConcurrentMap: "i|Map,Object|clear:void,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,merge:?,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      ConcurrentModificationException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ConcurrentNavigableMap: "i|ConcurrentMap,Map,NavigableMap,Object,SequencedMap,SortedMap|ceilingEntry:Entry,ceilingKey:?,clear:void,comparator:Comparator,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,descendingKeySet:NavigableSet,descendingMap:ConcurrentNavigableMap,entrySet:Set,firstEntry:Entry,firstKey:?,floorEntry:Entry,floorKey:?,forEach:void,get:?,getOrDefault:?,headMap:ConcurrentNavigableMap,higherEntry:Entry,higherKey:?,isEmpty:boolean,keySet:NavigableSet,lastEntry:Entry,lastKey:?,lowerEntry:Entry,lowerKey:?,merge:?,navigableKeySet:NavigableSet,pollFirstEntry:Entry,pollLastEntry:Entry,put:?,putAll:void,putFirst:?,putIfAbsent:?,putLast:?,remove:?,replace:?,replaceAll:void,reversed:NavigableMap,sequencedEntrySet:SequencedSet,sequencedKeySet:SequencedSet,sequencedValues:SequencedCollection,size:int,subMap:ConcurrentNavigableMap,tailMap:ConcurrentNavigableMap,values:Collection",
+      ConcurrentSkipListMap: "|AbstractMap,Cloneable,ConcurrentMap,ConcurrentNavigableMap,Map,NavigableMap,Object,SequencedMap,Serializable,SortedMap|ceilingEntry:Entry,ceilingKey:?,clear:void,clone:ConcurrentSkipListMap,comparator:Comparator,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,descendingKeySet:NavigableSet,descendingMap:ConcurrentNavigableMap,entrySet:Set,firstEntry:Entry,firstKey:?,floorEntry:Entry,floorKey:?,forEach:void,get:?,getOrDefault:?,headMap:ConcurrentNavigableMap,higherEntry:Entry,higherKey:?,isEmpty:boolean,keySet:NavigableSet,lastEntry:Entry,lastKey:?,lowerEntry:Entry,lowerKey:?,merge:?,navigableKeySet:NavigableSet,pollFirstEntry:Entry,pollLastEntry:Entry,put:?,putAll:void,putFirst:?,putIfAbsent:?,putLast:?,remove:?,replace:?,replaceAll:void,reversed:NavigableMap,sequencedEntrySet:SequencedSet,sequencedKeySet:SequencedSet,sequencedValues:SequencedCollection,size:int,subMap:ConcurrentNavigableMap,tailMap:ConcurrentNavigableMap,values:Collection",
+      ConcurrentSkipListSet: "|AbstractCollection,AbstractSet,Cloneable,Collection,Iterable,NavigableSet,Object,SequencedCollection,SequencedSet,Serializable,Set,SortedSet|add:boolean,addAll:boolean,addFirst:void,addLast:void,ceiling:?,clear:void,clone:ConcurrentSkipListSet,comparator:Comparator,contains:boolean,containsAll:boolean,descendingIterator:Iterator,descendingSet:NavigableSet,first:?,floor:?,forEach:void,getFirst:?,getLast:?,headSet:NavigableSet,higher:?,isEmpty:boolean,iterator:Iterator,last:?,lower:?,parallelStream:Stream,pollFirst:?,pollLast:?,remove:boolean,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,retainAll:boolean,reversed:NavigableSet,size:int,spliterator:Spliterator,stream:Stream,subSet:NavigableSet,tailSet:NavigableSet,toArray:?",
+      Condition: "i|Object|await:?,awaitNanos:long,awaitUninterruptibly:void,awaitUntil:boolean,signal:void,signalAll:void",
+      ConditionObject: "|Condition,Object,Serializable|await:?,awaitNanos:long,awaitUninterruptibly:void,awaitUntil:boolean,signal:void,signalAll:void",
+      Config: "f|Object|createFilter:ObjectInputFilter,getSerialFilter:ObjectInputFilter,getSerialFilterFactory:BinaryOperator,setSerialFilter:void,setSerialFilterFactory:void",
+      Configuration: "i|Object|withName:Configuration,withThreadFactory:Configuration,withTimeout:Configuration",
+      Connection: "i|AutoCloseable,Object,Wrapper|abort:void,beginRequest:void,clearWarnings:void,close:void,commit:void,createArrayOf:Array,createBlob:Blob,createClob:Clob,createNClob:NClob,createSQLXML:SQLXML,createStatement:Statement,createStruct:Struct,endRequest:void,getAutoCommit:boolean,getCatalog:String,getClientInfo:?,getHoldability:int,getMetaData:DatabaseMetaData,getNetworkTimeout:int,getSchema:String,getTransactionIsolation:int,getTypeMap:Map,getWarnings:SQLWarning,isClosed:boolean,isReadOnly:boolean,isValid:boolean,isWrapperFor:boolean,nativeSQL:String,prepareCall:CallableStatement,prepareStatement:PreparedStatement,releaseSavepoint:void,rollback:void,setAutoCommit:void,setCatalog:void,setClientInfo:void,setHoldability:void,setNetworkTimeout:void,setReadOnly:void,setSavepoint:Savepoint,setSchema:void,setShardingKey:void,setShardingKeyIfValid:boolean,setTransactionIsolation:void,setTypeMap:void,unwrap:?",
+      ConnectionBuilder: "i|Object|build:Connection,password:ConnectionBuilder,shardingKey:ConnectionBuilder,superShardingKey:ConnectionBuilder,user:ConnectionBuilder",
+      Console: "|Flushable,Object|charset:Charset,flush:void,format:Console,isTerminal:boolean,printf:Console,readLine:String,readPassword:char[],reader:Reader,writer:PrintWriter",
+      Consumer: "i|Object|accept:void,andThen:Consumer",
+      Control: "|Object|getCandidateLocales:List,getControl:Control,getFallbackLocale:Locale,getFormats:List,getNoFallbackControl:Control,getTimeToLive:long,needsReload:boolean,newBundle:ResourceBundle,toBundleName:String,toResourceName:String",
+      Controller: "f|Object|addExports:Controller,addOpens:Controller,addReads:Controller,enableNativeAccess:Controller,layer:ModuleLayer",
+      CopyOnWriteArrayList: "|Cloneable,Collection,Iterable,List,Object,RandomAccess,SequencedCollection,Serializable|add:?,addAll:boolean,addAllAbsent:int,addFirst:void,addIfAbsent:boolean,addLast:void,clear:void,clone:Object,contains:boolean,containsAll:boolean,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,isEmpty:boolean,iterator:Iterator,lastIndexOf:int,listIterator:ListIterator,parallelStream:Stream,remove:?,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,replaceAll:void,retainAll:boolean,reversed:List,set:?,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?",
+      CopyOnWriteArraySet: "|AbstractCollection,AbstractSet,Collection,Iterable,Object,Serializable,Set|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,forEach:void,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      CopyOption: "i|Object|",
+      CountDownLatch: "|Object|await:?,countDown:void,getCount:long",
+      CountedCompleter: "|ForkJoinTask,Future,Object,Serializable|adapt:ForkJoinTask,adaptInterruptible:ForkJoinTask,addToPendingCount:void,cancel:boolean,compareAndSetForkJoinTaskTag:boolean,compareAndSetPendingCount:boolean,complete:void,completeExceptionally:void,compute:void,decrementPendingCountUnlessZero:int,exceptionNow:Throwable,firstComplete:CountedCompleter,fork:ForkJoinTask,get:?,getCompleter:CountedCompleter,getException:Throwable,getForkJoinTaskTag:short,getPendingCount:int,getPool:ForkJoinPool,getQueuedTaskCount:int,getRawResult:?,getRoot:CountedCompleter,getSurplusQueuedTaskCount:int,helpComplete:void,helpQuiesce:void,inForkJoinPool:boolean,invoke:?,invokeAll:?,isCancelled:boolean,isCompletedAbnormally:boolean,isCompletedNormally:boolean,isDone:boolean,join:?,nextComplete:CountedCompleter,onCompletion:void,onExceptionalCompletion:boolean,propagateCompletion:void,quietlyComplete:void,quietlyCompleteRoot:void,quietlyInvoke:void,quietlyJoin:?,quietlyJoinUninterruptibly:boolean,reinitialize:void,resultNow:?,setForkJoinTaskTag:short,setPendingCount:void,state:Future.State,tryComplete:void,tryUnfork:boolean",
+      Currency: "f|Object,Serializable|availableCurrencies:Stream,getAvailableCurrencies:Set,getCurrencyCode:String,getDefaultFractionDigits:int,getDisplayName:String,getInstance:Currency,getNumericCode:int,getNumericCodeAsString:String,getSymbol:String",
+      CyclicBarrier: "|Object|await:int,getNumberWaiting:int,getParties:int,isBroken:boolean,reset:void",
+      DataInput: "i|Object|readBoolean:boolean,readByte:byte,readChar:char,readDouble:double,readFloat:float,readFully:void,readInt:int,readLine:String,readLong:long,readShort:short,readUTF:String,readUnsignedByte:int,readUnsignedShort:int,skipBytes:int",
+      DataInputStream: "|AutoCloseable,Closeable,DataInput,FilterInputStream,InputStream,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readBoolean:boolean,readByte:byte,readChar:char,readDouble:double,readFloat:float,readFully:void,readInt:int,readLine:String,readLong:long,readNBytes:?,readShort:short,readUTF:String,readUnsignedByte:int,readUnsignedShort:int,reset:void,skip:long,skipBytes:int,skipNBytes:void,transferTo:long",
+      DataOutput: "i|Object|write:void,writeBoolean:void,writeByte:void,writeBytes:void,writeChar:void,writeChars:void,writeDouble:void,writeFloat:void,writeInt:void,writeLong:void,writeShort:void,writeUTF:void",
+      DataOutputStream: "|AutoCloseable,Closeable,DataOutput,FilterOutputStream,Flushable,Object,OutputStream|close:void,flush:void,nullOutputStream:OutputStream,size:int,write:void,writeBoolean:void,writeByte:void,writeBytes:void,writeChar:void,writeChars:void,writeDouble:void,writeFloat:void,writeInt:void,writeLong:void,writeShort:void,writeUTF:void",
+      DataTruncation: "|Exception,Iterable,Object,SQLException,SQLWarning,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getDataSize:int,getErrorCode:int,getIndex:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getNextWarning:SQLWarning,getParameter:boolean,getRead:boolean,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],getTransferSize:int,initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setNextWarning:void,setStackTrace:void,spliterator:Spliterator",
+      DatabaseMetaData: "i|Object,Wrapper|allProceduresAreCallable:boolean,allTablesAreSelectable:boolean,autoCommitFailureClosesAllResultSets:boolean,dataDefinitionCausesTransactionCommit:boolean,dataDefinitionIgnoredInTransactions:boolean,deletesAreDetected:boolean,doesMaxRowSizeIncludeBlobs:boolean,generatedKeyAlwaysReturned:boolean,getAttributes:ResultSet,getBestRowIdentifier:ResultSet,getCatalogSeparator:String,getCatalogTerm:String,getCatalogs:ResultSet,getClientInfoProperties:ResultSet,getColumnPrivileges:ResultSet,getColumns:ResultSet,getConnection:Connection,getCrossReference:ResultSet,getDatabaseMajorVersion:int,getDatabaseMinorVersion:int,getDatabaseProductName:String,getDatabaseProductVersion:String,getDefaultTransactionIsolation:int,getDriverMajorVersion:int,getDriverMinorVersion:int,getDriverName:String,getDriverVersion:String,getExportedKeys:ResultSet,getExtraNameCharacters:String,getFunctionColumns:ResultSet,getFunctions:ResultSet,getIdentifierQuoteString:String,getImportedKeys:ResultSet,getIndexInfo:ResultSet,getJDBCMajorVersion:int,getJDBCMinorVersion:int,getMaxBinaryLiteralLength:int,getMaxCatalogNameLength:int,getMaxCharLiteralLength:int,getMaxColumnNameLength:int,getMaxColumnsInGroupBy:int,getMaxColumnsInIndex:int,getMaxColumnsInOrderBy:int,getMaxColumnsInSelect:int,getMaxColumnsInTable:int,getMaxConnections:int,getMaxCursorNameLength:int,getMaxIndexLength:int,getMaxLogicalLobSize:long,getMaxProcedureNameLength:int,getMaxRowSize:int,getMaxSchemaNameLength:int,getMaxStatementLength:int,getMaxStatements:int,getMaxTableNameLength:int,getMaxTablesInSelect:int,getMaxUserNameLength:int,getNumericFunctions:String,getPrimaryKeys:ResultSet,getProcedureColumns:ResultSet,getProcedureTerm:String,getProcedures:ResultSet,getPseudoColumns:ResultSet,getResultSetHoldability:int,getRowIdLifetime:RowIdLifetime,getSQLKeywords:String,getSQLStateType:int,getSchemaTerm:String,getSchemas:ResultSet,getSearchStringEscape:String,getStringFunctions:String,getSuperTables:ResultSet,getSuperTypes:ResultSet,getSystemFunctions:String,getTablePrivileges:ResultSet,getTableTypes:ResultSet,getTables:ResultSet,getTimeDateFunctions:String,getTypeInfo:ResultSet,getUDTs:ResultSet,getURL:String,getUserName:String,getVersionColumns:ResultSet,insertsAreDetected:boolean,isCatalogAtStart:boolean,isReadOnly:boolean,isWrapperFor:boolean,locatorsUpdateCopy:boolean,nullPlusNonNullIsNull:boolean,nullsAreSortedAtEnd:boolean,nullsAreSortedAtStart:boolean,nullsAreSortedHigh:boolean,nullsAreSortedLow:boolean,othersDeletesAreVisible:boolean,othersInsertsAreVisible:boolean,othersUpdatesAreVisible:boolean,ownDeletesAreVisible:boolean,ownInsertsAreVisible:boolean,ownUpdatesAreVisible:boolean,storesLowerCaseIdentifiers:boolean,storesLowerCaseQuotedIdentifiers:boolean,storesMixedCaseIdentifiers:boolean,storesMixedCaseQuotedIdentifiers:boolean,storesUpperCaseIdentifiers:boolean,storesUpperCaseQuotedIdentifiers:boolean,supportsANSI92EntryLevelSQL:boolean,supportsANSI92FullSQL:boolean,supportsANSI92IntermediateSQL:boolean,supportsAlterTableWithAddColumn:boolean,supportsAlterTableWithDropColumn:boolean,supportsBatchUpdates:boolean,supportsCatalogsInDataManipulation:boolean,supportsCatalogsInIndexDefinitions:boolean,supportsCatalogsInPrivilegeDefinitions:boolean,supportsCatalogsInProcedureCalls:boolean,supportsCatalogsInTableDefinitions:boolean,supportsColumnAliasing:boolean,supportsConvert:boolean,supportsCoreSQLGrammar:boolean,supportsCorrelatedSubqueries:boolean,supportsDataDefinitionAndDataManipulationTransactions:boolean,supportsDataManipulationTransactionsOnly:boolean,supportsDifferentTableCorrelationNames:boolean,supportsExpressionsInOrderBy:boolean,supportsExtendedSQLGrammar:boolean,supportsFullOuterJoins:boolean,supportsGetGeneratedKeys:boolean,supportsGroupBy:boolean,supportsGroupByBeyondSelect:boolean,supportsGroupByUnrelated:boolean,supportsIntegrityEnhancementFacility:boolean,supportsLikeEscapeClause:boolean,supportsLimitedOuterJoins:boolean,supportsMinimumSQLGrammar:boolean,supportsMixedCaseIdentifiers:boolean,supportsMixedCaseQuotedIdentifiers:boolean,supportsMultipleOpenResults:boolean,supportsMultipleResultSets:boolean,supportsMultipleTransactions:boolean,supportsNamedParameters:boolean,supportsNonNullableColumns:boolean,supportsOpenCursorsAcrossCommit:boolean,supportsOpenCursorsAcrossRollback:boolean,supportsOpenStatementsAcrossCommit:boolean,supportsOpenStatementsAcrossRollback:boolean,supportsOrderByUnrelated:boolean,supportsOuterJoins:boolean,supportsPositionedDelete:boolean,supportsPositionedUpdate:boolean,supportsRefCursors:boolean,supportsResultSetConcurrency:boolean,supportsResultSetHoldability:boolean,supportsResultSetType:boolean,supportsSavepoints:boolean,supportsSchemasInDataManipulation:boolean,supportsSchemasInIndexDefinitions:boolean,supportsSchemasInPrivilegeDefinitions:boolean,supportsSchemasInProcedureCalls:boolean,supportsSchemasInTableDefinitions:boolean,supportsSelectForUpdate:boolean,supportsSharding:boolean,supportsStatementPooling:boolean,supportsStoredFunctionsUsingCallSyntax:boolean,supportsStoredProcedures:boolean,supportsSubqueriesInComparisons:boolean,supportsSubqueriesInExists:boolean,supportsSubqueriesInIns:boolean,supportsSubqueriesInQuantifieds:boolean,supportsTableCorrelationNames:boolean,supportsTransactionIsolationLevel:boolean,supportsTransactions:boolean,supportsUnion:boolean,supportsUnionAll:boolean,unwrap:?,updatesAreDetected:boolean,usesLocalFilePerTable:boolean,usesLocalFiles:boolean",
+      Date: "|Cloneable,Comparable,Object,Serializable|UTC:long,after:boolean,before:boolean,clone:Object,compareTo:int,from:Date,getDate:int,getDay:int,getHours:int,getMinutes:int,getMonth:int,getSeconds:int,getTime:long,getTimezoneOffset:int,getYear:int,parse:long,setDate:void,setHours:void,setMinutes:void,setMonth:void,setSeconds:void,setTime:void,setYear:void,toGMTString:String,toInstant:Instant,toLocaleString:String",
+      DateTimeException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      DateTimeFormatter: "f|Object|format:String,formatTo:void,getChronology:Chronology,getDecimalStyle:DecimalStyle,getLocale:Locale,getResolverFields:Set,getResolverStyle:ResolverStyle,getZone:ZoneId,localizedBy:DateTimeFormatter,ofLocalizedDate:DateTimeFormatter,ofLocalizedDateTime:DateTimeFormatter,ofLocalizedPattern:DateTimeFormatter,ofLocalizedTime:DateTimeFormatter,ofPattern:DateTimeFormatter,parse:?,parseBest:TemporalAccessor,parseUnresolved:TemporalAccessor,parsedExcessDays:TemporalQuery,parsedLeapSecond:TemporalQuery,toFormat:Format,withChronology:DateTimeFormatter,withDecimalStyle:DateTimeFormatter,withLocale:DateTimeFormatter,withResolverFields:DateTimeFormatter,withResolverStyle:DateTimeFormatter,withZone:DateTimeFormatter",
+      DateTimeFormatterBuilder: "f|Object|append:DateTimeFormatterBuilder,appendChronologyId:DateTimeFormatterBuilder,appendChronologyText:DateTimeFormatterBuilder,appendDayPeriodText:DateTimeFormatterBuilder,appendFraction:DateTimeFormatterBuilder,appendGenericZoneText:DateTimeFormatterBuilder,appendInstant:DateTimeFormatterBuilder,appendLiteral:DateTimeFormatterBuilder,appendLocalized:DateTimeFormatterBuilder,appendLocalizedOffset:DateTimeFormatterBuilder,appendOffset:DateTimeFormatterBuilder,appendOffsetId:DateTimeFormatterBuilder,appendOptional:DateTimeFormatterBuilder,appendPattern:DateTimeFormatterBuilder,appendText:DateTimeFormatterBuilder,appendValue:DateTimeFormatterBuilder,appendValueReduced:DateTimeFormatterBuilder,appendZoneId:DateTimeFormatterBuilder,appendZoneOrOffsetId:DateTimeFormatterBuilder,appendZoneRegionId:DateTimeFormatterBuilder,appendZoneText:DateTimeFormatterBuilder,getLocalizedDateTimePattern:String,optionalEnd:DateTimeFormatterBuilder,optionalStart:DateTimeFormatterBuilder,padNext:DateTimeFormatterBuilder,parseCaseInsensitive:DateTimeFormatterBuilder,parseCaseSensitive:DateTimeFormatterBuilder,parseDefaulting:DateTimeFormatterBuilder,parseLenient:DateTimeFormatterBuilder,parseStrict:DateTimeFormatterBuilder,toFormatter:DateTimeFormatter",
+      DateTimeParseException: "|DateTimeException,Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getErrorIndex:int,getLocalizedMessage:String,getMessage:String,getParsedString:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      DayOfWeek: "f|Comparable,Constable,Enum,Object,Serializable,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,compareTo:int,describeConstable:Optional,from:DayOfWeek,get:int,getDeclaringClass:Class,getDisplayName:String,getLong:long,getValue:int,isSupported:boolean,minus:DayOfWeek,name:String,of:DayOfWeek,ordinal:int,plus:DayOfWeek,query:?,range:ValueRange,valueOf:?,values:DayOfWeek[]",
+      DecimalStyle: "f|Object|getAvailableLocales:Set,getDecimalSeparator:char,getNegativeSign:char,getPositiveSign:char,getZeroDigit:char,of:DecimalStyle,ofDefaultLocale:DecimalStyle,withDecimalSeparator:DecimalStyle,withNegativeSign:DecimalStyle,withPositiveSign:DecimalStyle,withZeroDigit:DecimalStyle",
+      Decoder: "|Object|decode:?,wrap:InputStream",
+      DelayQueue: "|AbstractCollection,AbstractQueue,BlockingQueue,Collection,Iterable,Object,Queue|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?",
+      Delayed: "i|Comparable,Object|compareTo:int,getDelay:long",
+      Deprecated: "i|Annotation,Object|annotationType:Class,forRemoval:boolean,since:String",
+      Deque: "i|Collection,Iterable,Object,Queue,SequencedCollection|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,descendingIterator:Iterator,element:?,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,offer:boolean,offerFirst:boolean,offerLast:boolean,parallelStream:Stream,peek:?,peekFirst:?,peekLast:?,poll:?,pollFirst:?,pollLast:?,pop:?,push:void,remove:?,removeAll:boolean,removeFirst:?,removeFirstOccurrence:boolean,removeIf:boolean,removeLast:?,removeLastOccurrence:boolean,retainAll:boolean,reversed:Deque,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Dictionary: "|Object|elements:Enumeration,get:?,isEmpty:boolean,keys:Enumeration,put:?,remove:?,size:int",
+      DirectoryIteratorException: "f|ConcurrentModificationException,Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:IOException,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      DirectoryNotEmptyException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      DirectoryStream: "i|AutoCloseable,Closeable,Iterable,Object|close:void,forEach:void,iterator:Iterator,spliterator:Spliterator",
+      "DirectoryStream.Filter": "i|Object|accept:boolean",
+      DiscardOldestPolicy: "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      DiscardPolicy: "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      Double: "f|Comparable,Constable,ConstantDesc,Number,Object,Serializable|byteValue:byte,compare:int,compareTo:int,describeConstable:Optional,doubleToLongBits:long,doubleToRawLongBits:long,doubleValue:double,floatValue:float,intValue:int,isFinite:boolean,isInfinite:boolean,isNaN:boolean,longBitsToDouble:double,longValue:long,max:double,min:double,parseDouble:double,resolveConstantDesc:Double,shortValue:short,sum:double,toHexString:String,valueOf:Double",
+      DoubleAccumulator: "|Number,Object,Serializable|accumulate:void,byteValue:byte,doubleValue:double,floatValue:float,get:double,getThenReset:double,intValue:int,longValue:long,reset:void,shortValue:short",
+      DoubleAdder: "|Number,Object,Serializable|add:void,byteValue:byte,doubleValue:double,floatValue:float,intValue:int,longValue:long,reset:void,shortValue:short,sum:double,sumThenReset:double",
+      DoubleBinaryOperator: "i|Object|applyAsDouble:double",
+      DoubleBuffer: "|Buffer,Comparable,Object|allocate:DoubleBuffer,array:double[],arrayOffset:int,asReadOnlyBuffer:DoubleBuffer,capacity:int,clear:DoubleBuffer,compact:DoubleBuffer,compareTo:int,duplicate:DoubleBuffer,flip:DoubleBuffer,get:?,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isReadOnly:boolean,limit:?,mark:DoubleBuffer,mismatch:int,order:ByteOrder,position:?,put:DoubleBuffer,remaining:int,reset:DoubleBuffer,rewind:DoubleBuffer,slice:DoubleBuffer,wrap:DoubleBuffer",
+      DoubleConsumer: "i|Object|accept:void,andThen:DoubleConsumer",
+      DoubleFunction: "i|Object|apply:?",
+      DoubleMapMultiConsumer: "i|Object|accept:void",
+      DoublePredicate: "i|Object|and:DoublePredicate,negate:DoublePredicate,or:DoublePredicate,test:boolean",
+      DoubleStream: "i|AutoCloseable,BaseStream,Object|allMatch:boolean,anyMatch:boolean,average:OptionalDouble,boxed:Stream,builder:DoubleStream.Builder,close:void,collect:?,concat:DoubleStream,count:long,distinct:DoubleStream,dropWhile:DoubleStream,empty:DoubleStream,filter:DoubleStream,findAny:OptionalDouble,findFirst:OptionalDouble,flatMap:DoubleStream,forEach:void,forEachOrdered:void,generate:DoubleStream,isParallel:boolean,iterate:DoubleStream,iterator:OfDouble,limit:DoubleStream,map:DoubleStream,mapMulti:DoubleStream,mapToInt:IntStream,mapToLong:LongStream,mapToObj:Stream,max:OptionalDouble,min:OptionalDouble,noneMatch:boolean,of:DoubleStream,onClose:DoubleStream,parallel:DoubleStream,peek:DoubleStream,reduce:?,sequential:DoubleStream,skip:DoubleStream,sorted:DoubleStream,spliterator:Spliterator.OfDouble,sum:double,summaryStatistics:DoubleSummaryStatistics,takeWhile:DoubleStream,toArray:double[],unordered:DoubleStream",
+      "DoubleStream.Builder": "i|DoubleConsumer,Object|accept:void,add:DoubleStream.Builder,andThen:DoubleConsumer,build:DoubleStream",
+      "DoubleStream.DoubleMapMultiConsumer": "i|Object|accept:void",
+      DoubleSummaryStatistics: "|DoubleConsumer,Object|accept:void,andThen:DoubleConsumer,combine:void,getAverage:double,getCount:long,getMax:double,getMin:double,getSum:double",
+      DoubleSupplier: "i|Object|getAsDouble:double",
+      DoubleToIntFunction: "i|Object|applyAsInt:int",
+      DoubleToLongFunction: "i|Object|applyAsLong:long",
+      DoubleUnaryOperator: "i|Object|andThen:DoubleUnaryOperator,applyAsDouble:double,compose:DoubleUnaryOperator,identity:DoubleUnaryOperator",
+      Downstream: "i|Object|isRejecting:boolean,push:boolean",
+      Driver: "i|Object|acceptsURL:boolean,connect:Connection,getMajorVersion:int,getMinorVersion:int,getParentLogger:?,getPropertyInfo:DriverPropertyInfo[],jdbcCompliant:boolean",
+      DriverAction: "i|Object|deregister:void",
+      DriverManager: "|Object|deregisterDriver:void,drivers:Stream,getConnection:Connection,getDriver:Driver,getDrivers:Enumeration,getLogStream:PrintStream,getLogWriter:PrintWriter,getLoginTimeout:int,println:void,registerDriver:void,setLogStream:void,setLogWriter:void,setLoginTimeout:void",
+      DriverPropertyInfo: "|Object|",
+      DuplicateFormatFlagsException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFlags:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Duration: "f|Comparable,Object,Serializable,TemporalAmount|abs:Duration,addTo:Temporal,between:Duration,compareTo:int,dividedBy:?,from:Duration,get:long,getNano:int,getSeconds:long,getUnits:List,isNegative:boolean,isPositive:boolean,isZero:boolean,minus:Duration,minusDays:Duration,minusHours:Duration,minusMillis:Duration,minusMinutes:Duration,minusNanos:Duration,minusSeconds:Duration,multipliedBy:Duration,negated:Duration,of:Duration,ofDays:Duration,ofHours:Duration,ofMillis:Duration,ofMinutes:Duration,ofNanos:Duration,ofSeconds:Duration,parse:Duration,plus:Duration,plusDays:Duration,plusHours:Duration,plusMillis:Duration,plusMinutes:Duration,plusNanos:Duration,plusSeconds:Duration,subtractFrom:Temporal,toDays:long,toDaysPart:long,toHours:long,toHoursPart:int,toMillis:long,toMillisPart:int,toMinutes:long,toMinutesPart:int,toNanos:long,toNanosPart:int,toSeconds:long,toSecondsPart:int,truncatedTo:Duration,withNanos:Duration,withSeconds:Duration",
+      EOFException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      EmptyStackException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Encoder: "|Object|encode:?,encodeToString:String,withoutPadding:Encoder,wrap:OutputStream",
+      Entry: "i|Object|comparingByKey:Comparator,comparingByValue:Comparator,copyOf:Entry,getKey:?,getValue:?,setValue:?",
+      Enum: "|Comparable,Constable,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?",
+      "Enum.EnumDesc": "f|ConstantDesc,DynamicConstantDesc,Object|bootstrapArgs:ConstantDesc[],bootstrapArgsList:List,bootstrapMethod:DirectMethodHandleDesc,constantName:String,constantType:ClassDesc,of:?,ofCanonical:ConstantDesc,ofNamed:DynamicConstantDesc,resolveConstantDesc:?",
+      EnumConstantNotPresentException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,constantName:String,enumType:Class,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      EnumDesc: "f|ConstantDesc,DynamicConstantDesc,Object|bootstrapArgs:ConstantDesc[],bootstrapArgsList:List,bootstrapMethod:DirectMethodHandleDesc,constantName:String,constantType:ClassDesc,of:?,ofCanonical:ConstantDesc,ofNamed:DynamicConstantDesc,resolveConstantDesc:?",
+      EnumMap: "|AbstractMap,Cloneable,Map,Object,Serializable|clear:void,clone:EnumMap,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,merge:?,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      EnumSet: "|AbstractCollection,AbstractSet,Cloneable,Collection,Iterable,Object,Serializable,Set|add:boolean,addAll:boolean,allOf:EnumSet,clear:void,clone:EnumSet,complementOf:EnumSet,contains:boolean,containsAll:boolean,copyOf:EnumSet,forEach:void,isEmpty:boolean,iterator:Iterator,noneOf:EnumSet,of:EnumSet,parallelStream:Stream,range:EnumSet,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Enumeration: "i|Object|asIterator:Iterator,hasMoreElements:boolean,nextElement:?",
+      Error: "|Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      EventListener: "i|Object|",
+      EventListenerProxy: "|EventListener,Object|getListener:?",
+      EventObject: "|Object,Serializable|getSource:Object",
+      Exception: "|Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ExceptionInInitializerError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getException:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Exchanger: "|Object|exchange:?",
+      ExecutionException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Executor: "i|Object|execute:void",
+      ExecutorCompletionService: "|CompletionService,Object|poll:Future,submit:Future,take:Future",
+      ExecutorService: "i|AutoCloseable,Executor,Object|awaitTermination:boolean,close:void,execute:void,invokeAll:List,invokeAny:?,isShutdown:boolean,isTerminated:boolean,shutdown:void,shutdownNow:List,submit:Future",
+      Executors: "f|Object|callable:Callable,defaultThreadFactory:ThreadFactory,newCachedThreadPool:ExecutorService,newFixedThreadPool:ExecutorService,newScheduledThreadPool:ScheduledExecutorService,newSingleThreadExecutor:ExecutorService,newSingleThreadScheduledExecutor:ScheduledExecutorService,newThreadPerTaskExecutor:ExecutorService,newVirtualThreadPerTaskExecutor:ExecutorService,newWorkStealingPool:ExecutorService,privilegedCallable:Callable,privilegedCallableUsingCurrentClassLoader:Callable,privilegedThreadFactory:ThreadFactory,unconfigurableExecutorService:ExecutorService,unconfigurableScheduledExecutorService:ScheduledExecutorService",
+      Externalizable: "i|Object,Serializable|readExternal:void,writeExternal:void",
+      FailedException: "f|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      File: "|Comparable,Object,Serializable|canExecute:boolean,canRead:boolean,canWrite:boolean,compareTo:int,createNewFile:boolean,createTempFile:File,delete:boolean,deleteOnExit:void,exists:boolean,getAbsoluteFile:File,getAbsolutePath:String,getCanonicalFile:File,getCanonicalPath:String,getFreeSpace:long,getName:String,getParent:String,getParentFile:File,getPath:String,getTotalSpace:long,getUsableSpace:long,isAbsolute:boolean,isDirectory:boolean,isFile:boolean,isHidden:boolean,lastModified:long,length:long,list:String[],listFiles:File[],listRoots:File[],mkdir:boolean,mkdirs:boolean,renameTo:boolean,setExecutable:boolean,setLastModified:boolean,setReadOnly:boolean,setReadable:boolean,setWritable:boolean,toPath:Path,toURI:URI,toURL:URL",
+      FileAlreadyExistsException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      FileDescriptor: "f|Object|sync:void,valid:boolean",
+      FileFilter: "i|Object|accept:boolean",
+      FileInputStream: "|AutoCloseable,Closeable,InputStream,Object|available:int,close:void,getChannel:FileChannel,getFD:FileDescriptor,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      FileNotFoundException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      FileOutputStream: "|AutoCloseable,Closeable,Flushable,Object,OutputStream|close:void,flush:void,getChannel:FileChannel,getFD:FileDescriptor,nullOutputStream:OutputStream,write:void",
+      FilePermission: "f|Guard,Object,Permission,Serializable|checkGuard:void,getActions:String,getName:String,implies:boolean,newPermissionCollection:PermissionCollection",
+      FileReader: "|AutoCloseable,Closeable,InputStreamReader,Object,Readable,Reader|close:void,getEncoding:String,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long",
+      FileStore: "|Object|getAttribute:Object,getBlockSize:long,getFileStoreAttributeView:?,getTotalSpace:long,getUnallocatedSpace:long,getUsableSpace:long,isReadOnly:boolean,name:String,supportsFileAttributeView:boolean,type:String",
+      FileSystem: "|AutoCloseable,Closeable,Object|close:void,getFileStores:Iterable,getPath:Path,getPathMatcher:PathMatcher,getRootDirectories:Iterable,getSeparator:String,getUserPrincipalLookupService:UserPrincipalLookupService,isOpen:boolean,isReadOnly:boolean,newWatchService:WatchService,provider:FileSystemProvider,supportedFileAttributeViews:Set",
+      FileSystemAlreadyExistsException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      FileSystemException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      FileSystemLoopException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      FileSystemNotFoundException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      FileSystems: "f|Object|getDefault:FileSystem,getFileSystem:FileSystem,newFileSystem:FileSystem",
+      FileVisitOption: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:FileVisitOption[]",
+      FileVisitResult: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:FileVisitResult[]",
+      FileVisitor: "i|Object|postVisitDirectory:FileVisitResult,preVisitDirectory:FileVisitResult,visitFile:FileVisitResult,visitFileFailed:FileVisitResult",
+      FileWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,OutputStreamWriter,Writer|append:Writer,close:void,flush:void,getEncoding:String,nullWriter:Writer,write:void",
+      FilenameFilter: "i|Object|accept:boolean",
+      Files: "f|Object|copy:?,createDirectories:Path,createDirectory:Path,createFile:Path,createLink:Path,createSymbolicLink:Path,createTempDirectory:Path,createTempFile:Path,delete:void,deleteIfExists:boolean,exists:boolean,find:Stream,getAttribute:Object,getFileAttributeView:?,getFileStore:FileStore,getLastModifiedTime:FileTime,getOwner:UserPrincipal,getPosixFilePermissions:Set,isDirectory:boolean,isExecutable:boolean,isHidden:boolean,isReadable:boolean,isRegularFile:boolean,isSameFile:boolean,isSymbolicLink:boolean,isWritable:boolean,lines:Stream,list:Stream,mismatch:long,move:Path,newBufferedReader:BufferedReader,newBufferedWriter:BufferedWriter,newByteChannel:SeekableByteChannel,newDirectoryStream:DirectoryStream,newInputStream:InputStream,newOutputStream:OutputStream,notExists:boolean,probeContentType:String,readAllBytes:byte[],readAllLines:List,readAttributes:?,readString:String,readSymbolicLink:Path,setAttribute:Path,setLastModifiedTime:Path,setOwner:Path,setPosixFilePermissions:Path,size:long,walk:Stream,walkFileTree:Path,write:Path,writeString:Path",
+      Filter: "i|Object|accept:boolean",
+      FilterInfo: "i|Object|arrayLength:long,depth:long,references:long,serialClass:Class,streamBytes:long",
+      FilterInputStream: "|AutoCloseable,Closeable,InputStream,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      FilterOutputStream: "|AutoCloseable,Closeable,Flushable,Object,OutputStream|close:void,flush:void,nullOutputStream:OutputStream,write:void",
+      FilterReader: "|AutoCloseable,Closeable,Object,Readable,Reader|close:void,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long",
+      FilterWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,Writer|append:Writer,close:void,flush:void,nullWriter:Writer,write:void",
+      FilteringMode: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:FilteringMode[]",
+      Float: "f|Comparable,Constable,ConstantDesc,Number,Object,Serializable|byteValue:byte,compare:int,compareTo:int,describeConstable:Optional,doubleValue:double,float16ToFloat:float,floatToFloat16:short,floatToIntBits:int,floatToRawIntBits:int,floatValue:float,intBitsToFloat:float,intValue:int,isFinite:boolean,isInfinite:boolean,isNaN:boolean,longValue:long,max:float,min:float,parseFloat:float,resolveConstantDesc:Float,shortValue:short,sum:float,toHexString:String,valueOf:Float",
+      FloatBuffer: "|Buffer,Comparable,Object|allocate:FloatBuffer,array:float[],arrayOffset:int,asReadOnlyBuffer:FloatBuffer,capacity:int,clear:FloatBuffer,compact:FloatBuffer,compareTo:int,duplicate:FloatBuffer,flip:FloatBuffer,get:?,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isReadOnly:boolean,limit:?,mark:FloatBuffer,mismatch:int,order:ByteOrder,position:?,put:FloatBuffer,remaining:int,reset:FloatBuffer,rewind:FloatBuffer,slice:FloatBuffer,wrap:FloatBuffer",
+      Flow: "f|Object|defaultBufferSize:int",
+      "Flow.Processor": "i|Object,Publisher,Subscriber|onComplete:void,onError:void,onNext:void,onSubscribe:void,subscribe:void",
+      "Flow.Publisher": "i|Object|subscribe:void",
+      "Flow.Subscriber": "i|Object|onComplete:void,onError:void,onNext:void,onSubscribe:void",
+      "Flow.Subscription": "i|Object|cancel:void,request:void",
+      Flushable: "i|Object|flush:void",
+      ForkJoinPool: "|AbstractExecutorService,AutoCloseable,Executor,ExecutorService,Object,ScheduledExecutorService|awaitQuiescence:boolean,awaitTermination:boolean,cancelDelayedTasksOnShutdown:void,close:void,commonPool:ForkJoinPool,execute:void,externalSubmit:ForkJoinTask,getActiveThreadCount:int,getAsyncMode:boolean,getCommonPoolParallelism:int,getDelayedTaskCount:long,getFactory:ForkJoinWorkerThreadFactory,getParallelism:int,getPoolSize:int,getQueuedSubmissionCount:int,getQueuedTaskCount:long,getRunningThreadCount:int,getStealCount:long,getUncaughtExceptionHandler:UncaughtExceptionHandler,hasQueuedSubmissions:boolean,invoke:?,invokeAll:List,invokeAllUninterruptibly:List,invokeAny:?,isQuiescent:boolean,isShutdown:boolean,isTerminated:boolean,isTerminating:boolean,lazySubmit:ForkJoinTask,managedBlock:void,schedule:ScheduledFuture,scheduleAtFixedRate:ScheduledFuture,scheduleWithFixedDelay:ScheduledFuture,setParallelism:int,shutdown:void,shutdownNow:List,submit:ForkJoinTask,submitWithTimeout:ForkJoinTask",
+      "ForkJoinPool.ForkJoinWorkerThreadFactory": "i|Object|newThread:ForkJoinWorkerThread",
+      "ForkJoinPool.ManagedBlocker": "i|Object|block:boolean,isReleasable:boolean",
+      ForkJoinTask: "|Future,Object,Serializable|adapt:ForkJoinTask,adaptInterruptible:ForkJoinTask,cancel:boolean,compareAndSetForkJoinTaskTag:boolean,complete:void,completeExceptionally:void,exceptionNow:Throwable,fork:ForkJoinTask,get:?,getException:Throwable,getForkJoinTaskTag:short,getPool:ForkJoinPool,getQueuedTaskCount:int,getRawResult:?,getSurplusQueuedTaskCount:int,helpQuiesce:void,inForkJoinPool:boolean,invoke:?,invokeAll:?,isCancelled:boolean,isCompletedAbnormally:boolean,isCompletedNormally:boolean,isDone:boolean,join:?,quietlyComplete:void,quietlyInvoke:void,quietlyJoin:?,quietlyJoinUninterruptibly:boolean,reinitialize:void,resultNow:?,setForkJoinTaskTag:short,state:Future.State,tryUnfork:boolean",
+      ForkJoinWorkerThread: "|Object,Runnable,Thread|activeCount:int,checkAccess:void,currentThread:Thread,dumpStack:void,enumerate:int,getAllStackTraces:Map,getContextClassLoader:ClassLoader,getDefaultUncaughtExceptionHandler:UncaughtExceptionHandler,getId:long,getName:String,getPool:ForkJoinPool,getPoolIndex:int,getPriority:int,getQueuedTaskCount:int,getStackTrace:StackTraceElement[],getState:State,getThreadGroup:ThreadGroup,getUncaughtExceptionHandler:UncaughtExceptionHandler,holdsLock:boolean,interrupt:void,interrupted:boolean,isAlive:boolean,isDaemon:boolean,isInterrupted:boolean,isVirtual:boolean,join:?,ofPlatform:OfPlatform,ofVirtual:OfVirtual,onSpinWait:void,run:void,setContextClassLoader:void,setDaemon:void,setDefaultUncaughtExceptionHandler:void,setName:void,setPriority:void,setUncaughtExceptionHandler:void,sleep:void,start:void,startVirtualThread:Thread,stop:void,threadId:long,yield:void",
+      ForkJoinWorkerThreadFactory: "i|Object|newThread:ForkJoinWorkerThread",
+      FormatFlagsConversionMismatchException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getConversion:char,getFlags:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      FormatStyle: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:FormatStyle[]",
+      Formattable: "i|Object|formatTo:void",
+      FormattableFlags: "f|Object|",
+      Formatter: "f|AutoCloseable,Closeable,Flushable,Object|close:void,flush:void,format:Formatter,ioException:IOException,locale:Locale,out:Appendable",
+      "Formatter.BigDecimalLayoutForm": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:BigDecimalLayoutForm[]",
+      FormatterClosedException: "|Exception,IllegalStateException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Function: "i|Object|andThen:Function,apply:?,compose:Function,identity:Function",
+      FunctionalInterface: "i|Annotation,Object|annotationType:Class",
+      Future: "i|Object|cancel:boolean,exceptionNow:Throwable,get:?,isCancelled:boolean,isDone:boolean,resultNow:?,state:Future.State",
+      "Future.State": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Future.State[]",
+      FutureTask: "|Future,Object,Runnable,RunnableFuture|cancel:boolean,exceptionNow:Throwable,get:?,isCancelled:boolean,isDone:boolean,resultNow:?,run:void,state:Future.State",
+      Gatherer: "i|Object|andThen:Gatherer,combiner:BinaryOperator,defaultCombiner:BinaryOperator,defaultFinisher:BiConsumer,defaultInitializer:Supplier,finisher:BiConsumer,initializer:Supplier,integrator:Integrator,of:Gatherer,ofSequential:Gatherer",
+      "Gatherer.Downstream": "i|Object|isRejecting:boolean,push:boolean",
+      "Gatherer.Integrator": "i|Object|integrate:boolean,of:Integrator,ofGreedy:Greedy",
+      "Gatherer.Integrator.Greedy": "i|Integrator,Object|integrate:boolean",
+      Gatherers: "f|Object|fold:Gatherer,mapConcurrent:Gatherer,scan:Gatherer,windowFixed:Gatherer,windowSliding:Gatherer",
+      GetField: "|Object|defaulted:boolean,get:?,getObjectStreamClass:ObjectStreamClass",
+      Greedy: "i|Integrator,Object|integrate:boolean",
+      GregorianCalendar: "|Calendar,Cloneable,Comparable,Object,Serializable|add:void,after:boolean,before:boolean,clear:void,clone:Object,compareTo:int,from:GregorianCalendar,get:int,getActualMaximum:int,getActualMinimum:int,getAvailableCalendarTypes:Set,getAvailableLocales:Locale[],getCalendarType:String,getDisplayName:String,getDisplayNames:Map,getFirstDayOfWeek:int,getGreatestMinimum:int,getGregorianChange:Date,getInstance:Calendar,getLeastMaximum:int,getMaximum:int,getMinimalDaysInFirstWeek:int,getMinimum:int,getTime:Date,getTimeInMillis:long,getTimeZone:TimeZone,getWeekYear:int,getWeeksInWeekYear:int,isLeapYear:boolean,isLenient:boolean,isSet:boolean,isWeekDateSupported:boolean,roll:void,set:void,setFirstDayOfWeek:void,setGregorianChange:void,setLenient:void,setMinimalDaysInFirstWeek:void,setTime:void,setTimeInMillis:void,setTimeZone:void,setWeekDate:void,toInstant:Instant,toZonedDateTime:ZonedDateTime",
+      HashMap: "|AbstractMap,Cloneable,Map,Object,Serializable|clear:void,clone:Object,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,merge:?,newHashMap:HashMap,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      HashSet: "|AbstractCollection,AbstractSet,Cloneable,Collection,Iterable,Object,Serializable,Set|add:boolean,addAll:boolean,clear:void,clone:Object,contains:boolean,containsAll:boolean,forEach:void,isEmpty:boolean,iterator:Iterator,newHashSet:HashSet,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Hashtable: "|Cloneable,Dictionary,Map,Object,Serializable|clear:void,clone:Object,compute:?,computeIfAbsent:?,computeIfPresent:?,contains:boolean,containsKey:boolean,containsValue:boolean,elements:Enumeration,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,keys:Enumeration,merge:?,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      HexFormat: "f|Object|delimiter:String,formatHex:?,fromHexDigit:int,fromHexDigits:int,fromHexDigitsToLong:long,isHexDigit:boolean,isUpperCase:boolean,of:HexFormat,ofDelimiter:HexFormat,parseHex:byte[],prefix:String,suffix:String,toHexDigits:?,toHighHexDigit:char,toLowHexDigit:char,withDelimiter:HexFormat,withLowerCase:HexFormat,withPrefix:HexFormat,withSuffix:HexFormat,withUpperCase:HexFormat",
+      IO: "f|Object|print:void,println:void,readln:String",
+      IOError: "|Error,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IOException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IdentityHashMap: "|AbstractMap,Cloneable,Map,Object,Serializable|clear:void,clone:Object,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,merge:?,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      IllegalAccessError: "|Error,IncompatibleClassChangeError,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalAccessException: "|Exception,Object,ReflectiveOperationException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalArgumentException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalCallerException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalCharsetNameException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getCharsetName:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalFormatCodePointException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getCodePoint:int,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalFormatConversionException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getArgumentClass:Class,getCause:Throwable,getConversion:char,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalFormatException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalFormatFlagsException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFlags:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalFormatPrecisionException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getPrecision:int,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalFormatWidthException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],getWidth:int,initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalMonitorStateException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalStateException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllegalThreadStateException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IllformedLocaleException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getErrorIndex:int,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IncompatibleClassChangeError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IndexOutOfBoundsException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Info: "i|Object|arguments:Optional,command:Optional,commandLine:Optional,startInstant:Optional,totalCpuDuration:Optional,user:Optional",
+      InheritableThreadLocal: "|Object,ThreadLocal|get:?,remove:void,set:void,withInitial:ThreadLocal",
+      InputMismatchException: "|Exception,NoSuchElementException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InputStream: "|AutoCloseable,Closeable,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      InputStreamReader: "|AutoCloseable,Closeable,Object,Readable,Reader|close:void,getEncoding:String,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long",
+      Instant: "f|Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atOffset:OffsetDateTime,atZone:ZonedDateTime,compareTo:int,from:Instant,get:int,getEpochSecond:long,getLong:long,getNano:int,isAfter:boolean,isBefore:boolean,isSupported:boolean,minus:Instant,minusMillis:Instant,minusNanos:Instant,minusSeconds:Instant,now:Instant,ofEpochMilli:Instant,ofEpochSecond:Instant,parse:Instant,plus:Instant,plusMillis:Instant,plusNanos:Instant,plusSeconds:Instant,query:?,range:ValueRange,toEpochMilli:long,truncatedTo:Instant,until:?,with:Instant",
+      InstantSource: "i|Object|fixed:InstantSource,instant:Instant,millis:long,offset:InstantSource,system:InstantSource,tick:InstantSource,withZone:Clock",
+      InstantiationError: "|Error,IncompatibleClassChangeError,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InstantiationException: "|Exception,Object,ReflectiveOperationException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IntBinaryOperator: "i|Object|applyAsInt:int",
+      IntBuffer: "|Buffer,Comparable,Object|allocate:IntBuffer,array:int[],arrayOffset:int,asReadOnlyBuffer:IntBuffer,capacity:int,clear:IntBuffer,compact:IntBuffer,compareTo:int,duplicate:IntBuffer,flip:IntBuffer,get:?,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isReadOnly:boolean,limit:?,mark:IntBuffer,mismatch:int,order:ByteOrder,position:?,put:IntBuffer,remaining:int,reset:IntBuffer,rewind:IntBuffer,slice:IntBuffer,wrap:IntBuffer",
+      IntConsumer: "i|Object|accept:void,andThen:IntConsumer",
+      IntFunction: "i|Object|apply:?",
+      IntMapMultiConsumer: "i|Object|accept:void",
+      IntPredicate: "i|Object|and:IntPredicate,negate:IntPredicate,or:IntPredicate,test:boolean",
+      IntStream: "i|AutoCloseable,BaseStream,Object|allMatch:boolean,anyMatch:boolean,asDoubleStream:DoubleStream,asLongStream:LongStream,average:OptionalDouble,boxed:Stream,builder:IntStream.Builder,close:void,collect:?,concat:IntStream,count:long,distinct:IntStream,dropWhile:IntStream,empty:IntStream,filter:IntStream,findAny:OptionalInt,findFirst:OptionalInt,flatMap:IntStream,forEach:void,forEachOrdered:void,generate:IntStream,isParallel:boolean,iterate:IntStream,iterator:OfInt,limit:IntStream,map:IntStream,mapMulti:IntStream,mapToDouble:DoubleStream,mapToLong:LongStream,mapToObj:Stream,max:OptionalInt,min:OptionalInt,noneMatch:boolean,of:IntStream,onClose:IntStream,parallel:IntStream,peek:IntStream,range:IntStream,rangeClosed:IntStream,reduce:?,sequential:IntStream,skip:IntStream,sorted:IntStream,spliterator:Spliterator.OfInt,sum:int,summaryStatistics:IntSummaryStatistics,takeWhile:IntStream,toArray:int[],unordered:IntStream",
+      "IntStream.Builder": "i|IntConsumer,Object|accept:void,add:IntStream.Builder,andThen:IntConsumer,build:IntStream",
+      "IntStream.IntMapMultiConsumer": "i|Object|accept:void",
+      IntSummaryStatistics: "|IntConsumer,Object|accept:void,andThen:IntConsumer,combine:void,getAverage:double,getCount:long,getMax:int,getMin:int,getSum:long",
+      IntSupplier: "i|Object|getAsInt:int",
+      IntToDoubleFunction: "i|Object|applyAsDouble:double",
+      IntToLongFunction: "i|Object|applyAsLong:long",
+      IntUnaryOperator: "i|Object|andThen:IntUnaryOperator,applyAsInt:int,compose:IntUnaryOperator,identity:IntUnaryOperator",
+      Integer: "f|Comparable,Constable,ConstantDesc,Number,Object,Serializable|bitCount:int,byteValue:byte,compare:int,compareTo:int,compareUnsigned:int,compress:int,decode:Integer,describeConstable:Optional,divideUnsigned:int,doubleValue:double,expand:int,floatValue:float,getInteger:Integer,highestOneBit:int,intValue:int,longValue:long,lowestOneBit:int,max:int,min:int,numberOfLeadingZeros:int,numberOfTrailingZeros:int,parseInt:int,parseUnsignedInt:int,remainderUnsigned:int,resolveConstantDesc:Integer,reverse:int,reverseBytes:int,rotateLeft:int,rotateRight:int,shortValue:short,signum:int,sum:int,toBinaryString:String,toHexString:String,toOctalString:String,toUnsignedLong:long,toUnsignedString:String,valueOf:Integer",
+      Integrator: "i|Object|integrate:boolean,of:Integrator,ofGreedy:Greedy",
+      InternalError: "|Error,Object,Serializable,Throwable,VirtualMachineError|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InterruptedException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InterruptedIOException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InvalidClassException: "|Exception,IOException,Object,ObjectStreamException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InvalidMarkException: "|Exception,IllegalStateException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InvalidObjectException: "|Exception,IOException,Object,ObjectStreamException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InvalidPathException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getIndex:int,getInput:String,getLocalizedMessage:String,getMessage:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      InvalidPropertiesFormatException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      IsoCountryCode: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:IsoCountryCode[]",
+      IsoFields: "f|Object|",
+      Iterable: "i|Object|forEach:void,iterator:Iterator,spliterator:Spliterator",
+      Iterator: "i|Object|forEachRemaining:void,hasNext:boolean,next:?,remove:void",
+      JDBCType: "f|Comparable,Constable,Enum,Object,SQLType,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,getName:String,getVendor:String,getVendorTypeNumber:Integer,name:String,ordinal:int,valueOf:?,values:JDBCType[]",
+      Joiner: "i|Object|allSuccessfulOrThrow:Joiner,allUntil:Joiner,anySuccessfulResultOrThrow:Joiner,awaitAll:Joiner,awaitAllSuccessfulOrThrow:Joiner,onComplete:boolean,onFork:boolean,result:?",
+      JulianFields: "f|Object|",
+      KeySetView: "f|Collection,Iterable,Object,Serializable,Set|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,forEach:void,getMap:ConcurrentHashMap,getMappedValue:?,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Kind: "i|Object|name:String,type:Class",
+      LanguageRange: "f|Object|getRange:String,getWeight:double,mapEquivalents:List,parse:List",
+      LayerInstantiationException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Level: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,getName:String,getSeverity:int,name:String,ordinal:int,valueOf:?,values:Level[]",
+      LineNumberInputStream: "|AutoCloseable,Closeable,FilterInputStream,InputStream,Object|available:int,close:void,getLineNumber:int,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,setLineNumber:void,skip:long,skipNBytes:void,transferTo:long",
+      LineNumberReader: "|AutoCloseable,BufferedReader,Closeable,Object,Readable,Reader|close:void,getLineNumber:int,lines:Stream,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,readLine:String,ready:boolean,reset:void,setLineNumber:void,skip:long,transferTo:long",
+      LinkOption: "f|Comparable,Constable,CopyOption,Enum,Object,OpenOption,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:LinkOption[]",
+      LinkPermission: "f|BasicPermission,Guard,Object,Permission,Serializable|checkGuard:void,getActions:String,getName:String,implies:boolean,newPermissionCollection:PermissionCollection",
+      LinkageError: "|Error,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      LinkedBlockingDeque: "|AbstractCollection,AbstractQueue,BlockingDeque,BlockingQueue,Collection,Deque,Iterable,Object,Queue,SequencedCollection,Serializable|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,descendingIterator:Iterator,drainTo:int,element:?,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,offer:boolean,offerFirst:boolean,offerLast:boolean,parallelStream:Stream,peek:?,peekFirst:?,peekLast:?,poll:?,pollFirst:?,pollLast:?,pop:?,push:void,put:void,putFirst:void,putLast:void,remainingCapacity:int,remove:?,removeAll:boolean,removeFirst:?,removeFirstOccurrence:boolean,removeIf:boolean,removeLast:?,removeLastOccurrence:boolean,retainAll:boolean,reversed:Deque,size:int,spliterator:Spliterator,stream:Stream,take:?,takeFirst:?,takeLast:?,toArray:?",
+      LinkedBlockingQueue: "|AbstractCollection,AbstractQueue,BlockingQueue,Collection,Iterable,Object,Queue,Serializable|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?",
+      LinkedHashMap: "|AbstractMap,Cloneable,HashMap,Map,Object,SequencedMap,Serializable|clear:void,clone:Object,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,firstEntry:Entry,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,lastEntry:Entry,merge:?,newHashMap:HashMap,newLinkedHashMap:LinkedHashMap,pollFirstEntry:Entry,pollLastEntry:Entry,put:?,putAll:void,putFirst:?,putIfAbsent:?,putLast:?,remove:?,replace:?,replaceAll:void,reversed:SequencedMap,sequencedEntrySet:SequencedSet,sequencedKeySet:SequencedSet,sequencedValues:SequencedCollection,size:int,values:Collection",
+      LinkedHashSet: "|AbstractCollection,AbstractSet,Cloneable,Collection,HashSet,Iterable,Object,SequencedCollection,SequencedSet,Serializable,Set|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,clone:Object,contains:boolean,containsAll:boolean,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,newHashSet:HashSet,newLinkedHashSet:LinkedHashSet,parallelStream:Stream,remove:boolean,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,retainAll:boolean,reversed:SequencedSet,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      LinkedList: "|AbstractCollection,AbstractList,AbstractSequentialList,Cloneable,Collection,Deque,Iterable,List,Object,Queue,SequencedCollection,Serializable|add:?,addAll:boolean,addFirst:void,addLast:void,clear:void,clone:Object,contains:boolean,containsAll:boolean,descendingIterator:Iterator,element:?,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,isEmpty:boolean,iterator:Iterator,lastIndexOf:int,listIterator:ListIterator,offer:boolean,offerFirst:boolean,offerLast:boolean,parallelStream:Stream,peek:?,peekFirst:?,peekLast:?,poll:?,pollFirst:?,pollLast:?,pop:?,push:void,remove:?,removeAll:boolean,removeFirst:?,removeFirstOccurrence:boolean,removeIf:boolean,removeLast:?,removeLastOccurrence:boolean,replaceAll:void,retainAll:boolean,reversed:LinkedList,set:?,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?",
+      LinkedTransferQueue: "|AbstractCollection,AbstractQueue,BlockingQueue,Collection,Iterable,Object,Queue,Serializable,TransferQueue|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,getWaitingConsumerCount:int,hasWaitingConsumer:boolean,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?,transfer:void,tryTransfer:boolean",
+      List: "i|Collection,Iterable,Object,SequencedCollection|add:?,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,copyOf:List,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,isEmpty:boolean,iterator:Iterator,lastIndexOf:int,listIterator:ListIterator,of:List,parallelStream:Stream,remove:?,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,replaceAll:void,retainAll:boolean,reversed:List,set:?,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?",
+      ListIterator: "i|Iterator,Object|add:void,forEachRemaining:void,hasNext:boolean,hasPrevious:boolean,next:?,nextIndex:int,previous:?,previousIndex:int,remove:void,set:void",
+      ListResourceBundle: "|Object,ResourceBundle|clearCache:void,containsKey:boolean,getBaseBundleName:String,getBundle:ResourceBundle,getKeys:Enumeration,getLocale:Locale,getObject:Object,getString:String,getStringArray:String[],handleGetObject:Object,keySet:Set",
+      LocalDate: "f|ChronoLocalDate,Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atStartOfDay:?,atTime:?,compareTo:int,datesUntil:Stream,format:String,from:LocalDate,get:int,getChronology:IsoChronology,getDayOfMonth:int,getDayOfWeek:DayOfWeek,getDayOfYear:int,getEra:IsoEra,getLong:long,getMonth:Month,getMonthValue:int,getYear:int,isAfter:boolean,isBefore:boolean,isEqual:boolean,isLeapYear:boolean,isSupported:boolean,lengthOfMonth:int,lengthOfYear:int,minus:LocalDate,minusDays:LocalDate,minusMonths:LocalDate,minusWeeks:LocalDate,minusYears:LocalDate,now:LocalDate,of:LocalDate,ofEpochDay:LocalDate,ofInstant:LocalDate,ofYearDay:LocalDate,parse:LocalDate,plus:LocalDate,plusDays:LocalDate,plusMonths:LocalDate,plusWeeks:LocalDate,plusYears:LocalDate,query:?,range:ValueRange,toEpochDay:long,toEpochSecond:long,until:?,with:LocalDate,withDayOfMonth:LocalDate,withDayOfYear:LocalDate,withMonth:LocalDate,withYear:LocalDate",
+      LocalDateTime: "f|ChronoLocalDateTime,Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atOffset:OffsetDateTime,atZone:ZonedDateTime,compareTo:int,format:String,from:LocalDateTime,get:int,getChronology:Chronology,getDayOfMonth:int,getDayOfWeek:DayOfWeek,getDayOfYear:int,getHour:int,getLong:long,getMinute:int,getMonth:Month,getMonthValue:int,getNano:int,getSecond:int,getYear:int,isAfter:boolean,isBefore:boolean,isEqual:boolean,isSupported:boolean,minus:LocalDateTime,minusDays:LocalDateTime,minusHours:LocalDateTime,minusMinutes:LocalDateTime,minusMonths:LocalDateTime,minusNanos:LocalDateTime,minusSeconds:LocalDateTime,minusWeeks:LocalDateTime,minusYears:LocalDateTime,now:LocalDateTime,of:LocalDateTime,ofEpochSecond:LocalDateTime,ofInstant:LocalDateTime,parse:LocalDateTime,plus:LocalDateTime,plusDays:LocalDateTime,plusHours:LocalDateTime,plusMinutes:LocalDateTime,plusMonths:LocalDateTime,plusNanos:LocalDateTime,plusSeconds:LocalDateTime,plusWeeks:LocalDateTime,plusYears:LocalDateTime,query:?,range:ValueRange,toEpochSecond:long,toInstant:Instant,toLocalDate:LocalDate,toLocalTime:LocalTime,truncatedTo:LocalDateTime,until:long,with:LocalDateTime,withDayOfMonth:LocalDateTime,withDayOfYear:LocalDateTime,withHour:LocalDateTime,withMinute:LocalDateTime,withMonth:LocalDateTime,withNano:LocalDateTime,withSecond:LocalDateTime,withYear:LocalDateTime",
+      LocalTime: "f|Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atDate:LocalDateTime,atOffset:OffsetTime,compareTo:int,format:String,from:LocalTime,get:int,getHour:int,getLong:long,getMinute:int,getNano:int,getSecond:int,isAfter:boolean,isBefore:boolean,isSupported:boolean,minus:LocalTime,minusHours:LocalTime,minusMinutes:LocalTime,minusNanos:LocalTime,minusSeconds:LocalTime,now:LocalTime,of:LocalTime,ofInstant:LocalTime,ofNanoOfDay:LocalTime,ofSecondOfDay:LocalTime,parse:LocalTime,plus:LocalTime,plusHours:LocalTime,plusMinutes:LocalTime,plusNanos:LocalTime,plusSeconds:LocalTime,query:?,range:ValueRange,toEpochSecond:long,toNanoOfDay:long,toSecondOfDay:int,truncatedTo:LocalTime,until:long,with:LocalTime,withHour:LocalTime,withMinute:LocalTime,withNano:LocalTime,withSecond:LocalTime",
+      Locale: "f|Cloneable,Object,Serializable|availableLocales:Stream,caseFoldLanguageTag:String,clone:Object,filter:List,filterTags:List,forLanguageTag:Locale,getAvailableLocales:Locale[],getCountry:String,getDefault:Locale,getDisplayCountry:String,getDisplayLanguage:String,getDisplayName:String,getDisplayScript:String,getDisplayVariant:String,getExtension:String,getExtensionKeys:Set,getISO3Country:String,getISO3Language:String,getISOCountries:?,getISOLanguages:String[],getLanguage:String,getScript:String,getUnicodeLocaleAttributes:Set,getUnicodeLocaleKeys:Set,getUnicodeLocaleType:String,getVariant:String,hasExtensions:boolean,lookup:Locale,lookupTag:String,of:Locale,setDefault:void,stripExtensions:Locale,toLanguageTag:String",
+      "Locale.Builder": "f|Object|addUnicodeLocaleAttribute:Locale.Builder,build:Locale,clear:Locale.Builder,clearExtensions:Locale.Builder,removeUnicodeLocaleAttribute:Locale.Builder,setExtension:Locale.Builder,setLanguage:Locale.Builder,setLanguageTag:Locale.Builder,setLocale:Locale.Builder,setRegion:Locale.Builder,setScript:Locale.Builder,setUnicodeLocaleKeyword:Locale.Builder,setVariant:Locale.Builder",
+      "Locale.Category": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Category[]",
+      "Locale.FilteringMode": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:FilteringMode[]",
+      "Locale.IsoCountryCode": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:IsoCountryCode[]",
+      "Locale.LanguageRange": "f|Object|getRange:String,getWeight:double,mapEquivalents:List,parse:List",
+      Lock: "i|Object|lock:void,lockInterruptibly:void,newCondition:Condition,tryLock:boolean,unlock:void",
+      LockSupport: "f|Object|getBlocker:Object,park:void,parkNanos:void,parkUntil:void,setCurrentBlocker:void,unpark:void",
+      Logger: "i|Object|getName:String,isLoggable:boolean,log:void",
+      LoggerFinder: "|Object|getLocalizedLogger:Logger,getLogger:Logger,getLoggerFinder:LoggerFinder",
+      Long: "f|Comparable,Constable,ConstantDesc,Number,Object,Serializable|bitCount:int,byteValue:byte,compare:int,compareTo:int,compareUnsigned:int,compress:long,decode:Long,describeConstable:Optional,divideUnsigned:long,doubleValue:double,expand:long,floatValue:float,getLong:Long,highestOneBit:long,intValue:int,longValue:long,lowestOneBit:long,max:long,min:long,numberOfLeadingZeros:int,numberOfTrailingZeros:int,parseLong:long,parseUnsignedLong:long,remainderUnsigned:long,resolveConstantDesc:Long,reverse:long,reverseBytes:long,rotateLeft:long,rotateRight:long,shortValue:short,signum:int,sum:long,toBinaryString:String,toHexString:String,toOctalString:String,toUnsignedString:String,valueOf:Long",
+      LongAccumulator: "|Number,Object,Serializable|accumulate:void,byteValue:byte,doubleValue:double,floatValue:float,get:long,getThenReset:long,intValue:int,longValue:long,reset:void,shortValue:short",
+      LongAdder: "|Number,Object,Serializable|add:void,byteValue:byte,decrement:void,doubleValue:double,floatValue:float,increment:void,intValue:int,longValue:long,reset:void,shortValue:short,sum:long,sumThenReset:long",
+      LongBinaryOperator: "i|Object|applyAsLong:long",
+      LongBuffer: "|Buffer,Comparable,Object|allocate:LongBuffer,array:long[],arrayOffset:int,asReadOnlyBuffer:LongBuffer,capacity:int,clear:LongBuffer,compact:LongBuffer,compareTo:int,duplicate:LongBuffer,flip:LongBuffer,get:?,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isReadOnly:boolean,limit:?,mark:LongBuffer,mismatch:int,order:ByteOrder,position:?,put:LongBuffer,remaining:int,reset:LongBuffer,rewind:LongBuffer,slice:LongBuffer,wrap:LongBuffer",
+      LongConsumer: "i|Object|accept:void,andThen:LongConsumer",
+      LongFunction: "i|Object|apply:?",
+      LongMapMultiConsumer: "i|Object|accept:void",
+      LongPredicate: "i|Object|and:LongPredicate,negate:LongPredicate,or:LongPredicate,test:boolean",
+      LongStream: "i|AutoCloseable,BaseStream,Object|allMatch:boolean,anyMatch:boolean,asDoubleStream:DoubleStream,average:OptionalDouble,boxed:Stream,builder:LongStream.Builder,close:void,collect:?,concat:LongStream,count:long,distinct:LongStream,dropWhile:LongStream,empty:LongStream,filter:LongStream,findAny:OptionalLong,findFirst:OptionalLong,flatMap:LongStream,forEach:void,forEachOrdered:void,generate:LongStream,isParallel:boolean,iterate:LongStream,iterator:OfLong,limit:LongStream,map:LongStream,mapMulti:LongStream,mapToDouble:DoubleStream,mapToInt:IntStream,mapToObj:Stream,max:OptionalLong,min:OptionalLong,noneMatch:boolean,of:LongStream,onClose:LongStream,parallel:LongStream,peek:LongStream,range:LongStream,rangeClosed:LongStream,reduce:?,sequential:LongStream,skip:LongStream,sorted:LongStream,spliterator:Spliterator.OfLong,sum:long,summaryStatistics:LongSummaryStatistics,takeWhile:LongStream,toArray:long[],unordered:LongStream",
+      "LongStream.Builder": "i|LongConsumer,Object|accept:void,add:LongStream.Builder,andThen:LongConsumer,build:LongStream",
+      "LongStream.LongMapMultiConsumer": "i|Object|accept:void",
+      LongSummaryStatistics: "|IntConsumer,LongConsumer,Object|accept:void,andThen:?,combine:void,getAverage:double,getCount:long,getMax:long,getMin:long,getSum:long",
+      LongSupplier: "i|Object|getAsLong:long",
+      LongToDoubleFunction: "i|Object|applyAsDouble:double",
+      LongToIntFunction: "i|Object|applyAsInt:int",
+      LongUnaryOperator: "i|Object|andThen:LongUnaryOperator,applyAsLong:long,compose:LongUnaryOperator,identity:LongUnaryOperator",
+      MalformedInputException: "|CharacterCodingException,Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getInputLength:int,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ManagedBlocker: "i|Object|block:boolean,isReleasable:boolean",
+      Map: "i|Object|clear:void,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,copyOf:Map,entry:Entry,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,merge:?,of:Map,ofEntries:Map,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      "Map.Entry": "i|Object|comparingByKey:Comparator,comparingByValue:Comparator,copyOf:Entry,getKey:?,getValue:?,setValue:?",
+      MappedByteBuffer: "|Buffer,ByteBuffer,Comparable,Object|alignedSlice:ByteBuffer,alignmentOffset:int,allocate:ByteBuffer,allocateDirect:ByteBuffer,array:byte[],arrayOffset:int,asCharBuffer:CharBuffer,asDoubleBuffer:DoubleBuffer,asFloatBuffer:FloatBuffer,asIntBuffer:IntBuffer,asLongBuffer:LongBuffer,asReadOnlyBuffer:ByteBuffer,asShortBuffer:ShortBuffer,capacity:int,clear:MappedByteBuffer,compact:MappedByteBuffer,compareTo:int,duplicate:MappedByteBuffer,flip:MappedByteBuffer,force:MappedByteBuffer,get:?,getChar:char,getDouble:double,getFloat:float,getInt:int,getLong:long,getShort:short,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isLoaded:boolean,isReadOnly:boolean,limit:?,load:MappedByteBuffer,mark:MappedByteBuffer,mismatch:int,order:?,position:?,put:ByteBuffer,putChar:ByteBuffer,putDouble:ByteBuffer,putFloat:ByteBuffer,putInt:ByteBuffer,putLong:ByteBuffer,putShort:ByteBuffer,remaining:int,reset:MappedByteBuffer,rewind:MappedByteBuffer,slice:MappedByteBuffer,wrap:ByteBuffer",
+      MatchException: "f|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      MatchResult: "i|Object|end:int,group:String,groupCount:int,hasMatch:boolean,namedGroups:Map,start:int",
+      Matcher: "f|MatchResult,Object|appendReplacement:Matcher,appendTail:?,end:int,find:boolean,group:String,groupCount:int,hasAnchoringBounds:boolean,hasMatch:boolean,hasTransparentBounds:boolean,hitEnd:boolean,lookingAt:boolean,matches:boolean,namedGroups:Map,pattern:Pattern,quoteReplacement:String,region:Matcher,regionEnd:int,regionStart:int,replaceAll:String,replaceFirst:String,requireEnd:boolean,reset:Matcher,results:Stream,start:int,toMatchResult:MatchResult,useAnchoringBounds:Matcher,usePattern:Matcher,useTransparentBounds:Matcher",
+      Math: "f|Object|IEEEremainder:double,abs:?,absExact:?,acos:double,addExact:?,asin:double,atan:double,atan2:double,cbrt:double,ceil:double,ceilDiv:?,ceilDivExact:?,ceilMod:?,clamp:?,copySign:?,cos:double,cosh:double,decrementExact:?,divideExact:?,exp:double,expm1:double,floor:double,floorDiv:?,floorDivExact:?,floorMod:?,fma:?,getExponent:int,hypot:double,incrementExact:?,log:double,log10:double,log1p:double,max:?,min:?,multiplyExact:?,multiplyFull:long,multiplyHigh:long,negateExact:?,nextAfter:?,nextDown:?,nextUp:?,pow:double,powExact:?,random:double,rint:double,round:?,scalb:?,signum:?,sin:double,sinh:double,sqrt:double,subtractExact:?,tan:double,tanh:double,toDegrees:double,toIntExact:int,toRadians:double,ulp:?,unsignedMultiplyExact:?,unsignedMultiplyHigh:long,unsignedPowExact:?",
+      MathContext: "f|Object,Serializable|getPrecision:int,getRoundingMode:RoundingMode",
+      MissingFormatArgumentException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFormatSpecifier:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      MissingFormatWidthException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFormatSpecifier:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      MissingResourceException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getClassName:String,getKey:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Modifier: "i|Object|name:String",
+      Module: "f|AnnotatedElement,Object|addExports:Module,addOpens:Module,addReads:Module,addUses:Module,canRead:boolean,canUse:boolean,getAnnotation:?,getAnnotations:Annotation[],getAnnotationsByType:?,getClassLoader:ClassLoader,getDeclaredAnnotation:?,getDeclaredAnnotations:Annotation[],getDeclaredAnnotationsByType:?,getDescriptor:ModuleDescriptor,getLayer:ModuleLayer,getName:String,getPackages:Set,getResourceAsStream:InputStream,isAnnotationPresent:boolean,isExported:boolean,isNamed:boolean,isNativeAccessEnabled:boolean,isOpen:boolean",
+      ModuleLayer: "f|Object|boot:ModuleLayer,configuration:?,defineModules:?,defineModulesWithManyLoaders:?,defineModulesWithOneLoader:?,empty:ModuleLayer,findLoader:ClassLoader,findModule:Optional,modules:Set,parents:List",
+      "ModuleLayer.Controller": "f|Object|addExports:Controller,addOpens:Controller,addReads:Controller,enableNativeAccess:Controller,layer:ModuleLayer",
+      Month: "f|Comparable,Constable,Enum,Object,Serializable,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,compareTo:int,describeConstable:Optional,firstDayOfYear:int,firstMonthOfQuarter:Month,from:Month,get:int,getDeclaringClass:Class,getDisplayName:String,getLong:long,getValue:int,isSupported:boolean,length:int,maxLength:int,minLength:int,minus:Month,name:String,of:Month,ordinal:int,plus:Month,query:?,range:ValueRange,valueOf:?,values:Month[]",
+      MonthDay: "f|Comparable,Object,Serializable,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atYear:LocalDate,compareTo:int,format:String,from:MonthDay,get:int,getDayOfMonth:int,getLong:long,getMonth:Month,getMonthValue:int,isAfter:boolean,isBefore:boolean,isSupported:boolean,isValidYear:boolean,now:MonthDay,of:MonthDay,parse:MonthDay,query:?,range:ValueRange,with:MonthDay,withDayOfMonth:MonthDay,withMonth:MonthDay",
+      NClob: "i|Clob,Object|free:void,getAsciiStream:InputStream,getCharacterStream:Reader,getSubString:String,length:long,position:long,setAsciiStream:OutputStream,setCharacterStream:Writer,setString:int,truncate:void",
+      NavigableMap: "i|Map,Object,SequencedMap,SortedMap|ceilingEntry:Entry,ceilingKey:?,clear:void,comparator:Comparator,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,descendingKeySet:NavigableSet,descendingMap:NavigableMap,entrySet:Set,firstEntry:Entry,firstKey:?,floorEntry:Entry,floorKey:?,forEach:void,get:?,getOrDefault:?,headMap:?,higherEntry:Entry,higherKey:?,isEmpty:boolean,keySet:Set,lastEntry:Entry,lastKey:?,lowerEntry:Entry,lowerKey:?,merge:?,navigableKeySet:NavigableSet,pollFirstEntry:Entry,pollLastEntry:Entry,put:?,putAll:void,putFirst:?,putIfAbsent:?,putLast:?,remove:?,replace:?,replaceAll:void,reversed:NavigableMap,sequencedEntrySet:SequencedSet,sequencedKeySet:SequencedSet,sequencedValues:SequencedCollection,size:int,subMap:?,tailMap:?,values:Collection",
+      NavigableSet: "i|Collection,Iterable,Object,SequencedCollection,SequencedSet,Set,SortedSet|add:boolean,addAll:boolean,addFirst:void,addLast:void,ceiling:?,clear:void,comparator:Comparator,contains:boolean,containsAll:boolean,descendingIterator:Iterator,descendingSet:NavigableSet,first:?,floor:?,forEach:void,getFirst:?,getLast:?,headSet:?,higher:?,isEmpty:boolean,iterator:Iterator,last:?,lower:?,parallelStream:Stream,pollFirst:?,pollLast:?,remove:boolean,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,retainAll:boolean,reversed:NavigableSet,size:int,spliterator:Spliterator,stream:Stream,subSet:?,tailSet:?,toArray:?",
+      NegativeArraySizeException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NoClassDefFoundError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NoSuchElementException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NoSuchFieldError: "|Error,IncompatibleClassChangeError,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NoSuchFieldException: "|Exception,Object,ReflectiveOperationException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NoSuchFileException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NoSuchMethodError: "|Error,IncompatibleClassChangeError,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NoSuchMethodException: "|Exception,Object,ReflectiveOperationException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NotActiveException: "|Exception,IOException,Object,ObjectStreamException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NotDirectoryException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NotLinkException: "|Exception,FileSystemException,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFile:String,getLocalizedMessage:String,getMessage:String,getOtherFile:String,getReason:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NotSerializableException: "|Exception,IOException,Object,ObjectStreamException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      NullPointerException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Number: "|Object,Serializable|byteValue:byte,doubleValue:double,floatValue:float,intValue:int,longValue:long,shortValue:short",
+      NumberFormatException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ObjDoubleConsumer: "i|Object|accept:void",
+      ObjIntConsumer: "i|Object|accept:void",
+      ObjLongConsumer: "i|Object|accept:void",
+      Object: "||equals:boolean,getClass:Class,hashCode:int,notify:void,notifyAll:void,toString:String,wait:void",
+      ObjectInput: "i|AutoCloseable,DataInput,Object|available:int,close:void,read:int,readBoolean:boolean,readByte:byte,readChar:char,readDouble:double,readFloat:float,readFully:void,readInt:int,readLine:String,readLong:long,readObject:Object,readShort:short,readUTF:String,readUnsignedByte:int,readUnsignedShort:int,skip:long,skipBytes:int",
+      ObjectInputFilter: "i|Object|allowFilter:ObjectInputFilter,checkInput:Status,merge:ObjectInputFilter,rejectFilter:ObjectInputFilter,rejectUndecidedClass:ObjectInputFilter",
+      "ObjectInputFilter.Config": "f|Object|createFilter:ObjectInputFilter,getSerialFilter:ObjectInputFilter,getSerialFilterFactory:BinaryOperator,setSerialFilter:void,setSerialFilterFactory:void",
+      "ObjectInputFilter.FilterInfo": "i|Object|arrayLength:long,depth:long,references:long,serialClass:Class,streamBytes:long",
+      "ObjectInputFilter.Status": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Status[]",
+      ObjectInputStream: "|AutoCloseable,Closeable,DataInput,InputStream,Object,ObjectInput,ObjectStreamConstants|available:int,close:void,defaultReadObject:void,getObjectInputFilter:ObjectInputFilter,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readBoolean:boolean,readByte:byte,readChar:char,readDouble:double,readFields:GetField,readFloat:float,readFully:void,readInt:int,readLine:String,readLong:long,readNBytes:?,readObject:Object,readShort:short,readUTF:String,readUnshared:Object,readUnsignedByte:int,readUnsignedShort:int,registerValidation:void,reset:void,setObjectInputFilter:void,skip:long,skipBytes:int,skipNBytes:void,transferTo:long",
+      "ObjectInputStream.GetField": "|Object|defaulted:boolean,get:?,getObjectStreamClass:ObjectStreamClass",
+      ObjectInputValidation: "i|Object|validateObject:void",
+      ObjectOutput: "i|AutoCloseable,DataOutput,Object|close:void,flush:void,write:void,writeBoolean:void,writeByte:void,writeBytes:void,writeChar:void,writeChars:void,writeDouble:void,writeFloat:void,writeInt:void,writeLong:void,writeObject:void,writeShort:void,writeUTF:void",
+      ObjectOutputStream: "|AutoCloseable,Closeable,DataOutput,Flushable,Object,ObjectOutput,ObjectStreamConstants,OutputStream|close:void,defaultWriteObject:void,flush:void,nullOutputStream:OutputStream,putFields:PutField,reset:void,useProtocolVersion:void,write:void,writeBoolean:void,writeByte:void,writeBytes:void,writeChar:void,writeChars:void,writeDouble:void,writeFields:void,writeFloat:void,writeInt:void,writeLong:void,writeObject:void,writeShort:void,writeUTF:void,writeUnshared:void",
+      "ObjectOutputStream.PutField": "|Object|put:void,write:void",
+      ObjectStreamClass: "f|Object,Serializable|forClass:Class,getField:ObjectStreamField,getFields:ObjectStreamField[],getName:String,getSerialVersionUID:long,lookup:ObjectStreamClass,lookupAny:ObjectStreamClass",
+      ObjectStreamConstants: "i|Object|",
+      ObjectStreamException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ObjectStreamField: "|Comparable,Object|compareTo:int,getName:String,getOffset:int,getType:Class,getTypeCode:char,getTypeString:String,isPrimitive:boolean,isUnshared:boolean",
+      Objects: "f|Object|checkFromIndexSize:?,checkFromToIndex:?,checkIndex:?,compare:int,deepEquals:boolean,hash:int,isNull:boolean,nonNull:boolean,requireNonNull:?,requireNonNullElse:?,requireNonNullElseGet:?,toIdentityString:String",
+      Observable: "|Object|addObserver:void,countObservers:int,deleteObserver:void,deleteObservers:void,hasChanged:boolean,notifyObservers:void",
+      Observer: "i|Object|update:void",
+      OfDouble: "i|Iterator,Object,PrimitiveIterator|forEachRemaining:void,hasNext:boolean,next:Double,nextDouble:double,remove:void",
+      OfInt: "i|Iterator,Object,PrimitiveIterator|forEachRemaining:void,hasNext:boolean,next:Integer,nextInt:int,remove:void",
+      OfLong: "i|Iterator,Object,PrimitiveIterator|forEachRemaining:void,hasNext:boolean,next:Long,nextLong:long,remove:void",
+      OfPlatform: "i|Builder,Object|daemon:OfPlatform,factory:ThreadFactory,group:OfPlatform,inheritInheritableThreadLocals:OfPlatform,name:OfPlatform,priority:OfPlatform,stackSize:OfPlatform,start:Thread,uncaughtExceptionHandler:OfPlatform,unstarted:Thread",
+      OfPrimitive: "i|Object,Spliterator|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:?",
+      OfVirtual: "i|Builder,Object|factory:ThreadFactory,inheritInheritableThreadLocals:OfVirtual,name:OfVirtual,start:Thread,uncaughtExceptionHandler:OfVirtual,unstarted:Thread",
+      OffsetDateTime: "f|Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atZoneSameInstant:ZonedDateTime,atZoneSimilarLocal:ZonedDateTime,compareTo:int,format:String,from:OffsetDateTime,get:int,getDayOfMonth:int,getDayOfWeek:DayOfWeek,getDayOfYear:int,getHour:int,getLong:long,getMinute:int,getMonth:Month,getMonthValue:int,getNano:int,getOffset:ZoneOffset,getSecond:int,getYear:int,isAfter:boolean,isBefore:boolean,isEqual:boolean,isSupported:boolean,minus:OffsetDateTime,minusDays:OffsetDateTime,minusHours:OffsetDateTime,minusMinutes:OffsetDateTime,minusMonths:OffsetDateTime,minusNanos:OffsetDateTime,minusSeconds:OffsetDateTime,minusWeeks:OffsetDateTime,minusYears:OffsetDateTime,now:OffsetDateTime,of:OffsetDateTime,ofInstant:OffsetDateTime,parse:OffsetDateTime,plus:OffsetDateTime,plusDays:OffsetDateTime,plusHours:OffsetDateTime,plusMinutes:OffsetDateTime,plusMonths:OffsetDateTime,plusNanos:OffsetDateTime,plusSeconds:OffsetDateTime,plusWeeks:OffsetDateTime,plusYears:OffsetDateTime,query:?,range:ValueRange,timeLineOrder:Comparator,toEpochSecond:long,toInstant:Instant,toLocalDate:LocalDate,toLocalDateTime:LocalDateTime,toLocalTime:LocalTime,toOffsetTime:OffsetTime,toZonedDateTime:ZonedDateTime,truncatedTo:OffsetDateTime,until:long,with:OffsetDateTime,withDayOfMonth:OffsetDateTime,withDayOfYear:OffsetDateTime,withHour:OffsetDateTime,withMinute:OffsetDateTime,withMonth:OffsetDateTime,withNano:OffsetDateTime,withOffsetSameInstant:OffsetDateTime,withOffsetSameLocal:OffsetDateTime,withSecond:OffsetDateTime,withYear:OffsetDateTime",
+      OffsetTime: "f|Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atDate:OffsetDateTime,compareTo:int,format:String,from:OffsetTime,get:int,getHour:int,getLong:long,getMinute:int,getNano:int,getOffset:ZoneOffset,getSecond:int,isAfter:boolean,isBefore:boolean,isEqual:boolean,isSupported:boolean,minus:OffsetTime,minusHours:OffsetTime,minusMinutes:OffsetTime,minusNanos:OffsetTime,minusSeconds:OffsetTime,now:OffsetTime,of:OffsetTime,ofInstant:OffsetTime,parse:OffsetTime,plus:OffsetTime,plusHours:OffsetTime,plusMinutes:OffsetTime,plusNanos:OffsetTime,plusSeconds:OffsetTime,query:?,range:ValueRange,toEpochSecond:long,toLocalTime:LocalTime,truncatedTo:OffsetTime,until:long,with:OffsetTime,withHour:OffsetTime,withMinute:OffsetTime,withNano:OffsetTime,withOffsetSameInstant:OffsetTime,withOffsetSameLocal:OffsetTime,withSecond:OffsetTime",
+      OpenOption: "i|Object|",
+      Option: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Option[]",
+      Optional: "f|Object|empty:Optional,filter:Optional,flatMap:Optional,get:?,ifPresent:void,ifPresentOrElse:void,isEmpty:boolean,isPresent:boolean,map:Optional,of:Optional,ofNullable:Optional,or:Optional,orElse:?,orElseGet:?,orElseThrow:?,stream:Stream",
+      OptionalDataException: "f|Exception,IOException,Object,ObjectStreamException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      OptionalDouble: "f|Object|empty:OptionalDouble,getAsDouble:double,ifPresent:void,ifPresentOrElse:void,isEmpty:boolean,isPresent:boolean,of:OptionalDouble,orElse:double,orElseGet:double,orElseThrow:double,stream:DoubleStream",
+      OptionalInt: "f|Object|empty:OptionalInt,getAsInt:int,ifPresent:void,ifPresentOrElse:void,isEmpty:boolean,isPresent:boolean,of:OptionalInt,orElse:int,orElseGet:int,orElseThrow:int,stream:IntStream",
+      OptionalLong: "f|Object|empty:OptionalLong,getAsLong:long,ifPresent:void,ifPresentOrElse:void,isEmpty:boolean,isPresent:boolean,of:OptionalLong,orElse:long,orElseGet:long,orElseThrow:long,stream:LongStream",
+      OutOfMemoryError: "|Error,Object,Serializable,Throwable,VirtualMachineError|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      OutputStream: "|AutoCloseable,Closeable,Flushable,Object|close:void,flush:void,nullOutputStream:OutputStream,write:void",
+      OutputStreamWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,Writer|append:Writer,close:void,flush:void,getEncoding:String,nullWriter:Writer,write:void",
+      Override: "i|Annotation,Object|annotationType:Class",
+      Package: "f|AnnotatedElement,Object|getAnnotation:?,getAnnotations:Annotation[],getAnnotationsByType:?,getDeclaredAnnotation:?,getDeclaredAnnotations:Annotation[],getDeclaredAnnotationsByType:?,getImplementationTitle:String,getImplementationVendor:String,getImplementationVersion:String,getName:String,getPackage:Package,getPackages:Package[],getSpecificationTitle:String,getSpecificationVendor:String,getSpecificationVersion:String,isAnnotationPresent:boolean,isCompatibleWith:boolean,isSealed:boolean",
+      ParameterMetaData: "i|Object,Wrapper|getParameterClassName:String,getParameterCount:int,getParameterMode:int,getParameterType:int,getParameterTypeName:String,getPrecision:int,getScale:int,isNullable:int,isSigned:boolean,isWrapperFor:boolean,unwrap:?",
+      Path: "i|Comparable,Iterable,Object,Watchable|compareTo:int,endsWith:boolean,forEach:void,getFileName:Path,getFileSystem:FileSystem,getName:Path,getNameCount:int,getParent:Path,getRoot:Path,isAbsolute:boolean,iterator:Iterator,normalize:Path,of:Path,register:WatchKey,relativize:Path,resolve:Path,resolveSibling:Path,spliterator:Spliterator,startsWith:boolean,subpath:Path,toAbsolutePath:Path,toFile:File,toRealPath:Path,toUri:URI",
+      PathMatcher: "i|Object|matches:boolean",
+      Paths: "f|Object|get:Path",
+      Pattern: "f|Object,Serializable|asMatchPredicate:Predicate,asPredicate:Predicate,compile:Pattern,flags:int,matcher:Matcher,matches:boolean,namedGroups:Map,pattern:String,quote:String,split:String[],splitAsStream:Stream,splitWithDelimiters:String[]",
+      PatternSyntaxException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getDescription:String,getIndex:int,getLocalizedMessage:String,getMessage:String,getPattern:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Period: "f|ChronoPeriod,Object,Serializable,TemporalAmount|addTo:Temporal,between:Period,from:Period,get:long,getChronology:IsoChronology,getDays:int,getMonths:int,getUnits:List,getYears:int,isNegative:boolean,isZero:boolean,minus:Period,minusDays:Period,minusMonths:Period,minusYears:Period,multipliedBy:Period,negated:Period,normalized:Period,of:Period,ofDays:Period,ofMonths:Period,ofWeeks:Period,ofYears:Period,parse:Period,plus:Period,plusDays:Period,plusMonths:Period,plusYears:Period,subtractFrom:Temporal,toTotalMonths:long,withDays:Period,withMonths:Period,withYears:Period",
+      Phaser: "|Object|arrive:int,arriveAndAwaitAdvance:int,arriveAndDeregister:int,awaitAdvance:int,awaitAdvanceInterruptibly:int,bulkRegister:int,forceTermination:void,getArrivedParties:int,getParent:Phaser,getPhase:int,getRegisteredParties:int,getRoot:Phaser,getUnarrivedParties:int,isTerminated:boolean,register:int",
+      PipedInputStream: "|AutoCloseable,Closeable,InputStream,Object|available:int,close:void,connect:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      PipedOutputStream: "|AutoCloseable,Closeable,Flushable,Object,OutputStream|close:void,connect:void,flush:void,nullOutputStream:OutputStream,write:void",
+      PipedReader: "|AutoCloseable,Closeable,Object,Readable,Reader|close:void,connect:void,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long",
+      PipedWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,Writer|append:Writer,close:void,connect:void,flush:void,nullWriter:Writer,write:void",
+      Predicate: "i|Object|and:Predicate,isEqual:Predicate,negate:Predicate,not:Predicate,or:Predicate,test:boolean",
+      PreparedStatement: "i|AutoCloseable,Object,Statement,Wrapper|addBatch:void,cancel:void,clearBatch:void,clearParameters:void,clearWarnings:void,close:void,closeOnCompletion:void,enquoteIdentifier:String,enquoteLiteral:String,enquoteNCharLiteral:String,execute:boolean,executeBatch:int[],executeLargeBatch:long[],executeLargeUpdate:long,executeQuery:ResultSet,executeUpdate:int,getConnection:Connection,getFetchDirection:int,getFetchSize:int,getGeneratedKeys:ResultSet,getLargeMaxRows:long,getLargeUpdateCount:long,getMaxFieldSize:int,getMaxRows:int,getMetaData:ResultSetMetaData,getMoreResults:boolean,getParameterMetaData:ParameterMetaData,getQueryTimeout:int,getResultSet:ResultSet,getResultSetConcurrency:int,getResultSetHoldability:int,getResultSetType:int,getUpdateCount:int,getWarnings:SQLWarning,isCloseOnCompletion:boolean,isClosed:boolean,isPoolable:boolean,isSimpleIdentifier:boolean,isWrapperFor:boolean,setArray:void,setAsciiStream:void,setBigDecimal:void,setBinaryStream:void,setBlob:void,setBoolean:void,setByte:void,setBytes:void,setCharacterStream:void,setClob:void,setCursorName:void,setDate:void,setDouble:void,setEscapeProcessing:void,setFetchDirection:void,setFetchSize:void,setFloat:void,setInt:void,setLargeMaxRows:void,setLong:void,setMaxFieldSize:void,setMaxRows:void,setNCharacterStream:void,setNClob:void,setNString:void,setNull:void,setObject:void,setPoolable:void,setQueryTimeout:void,setRef:void,setRowId:void,setSQLXML:void,setShort:void,setString:void,setTime:void,setTimestamp:void,setURL:void,setUnicodeStream:void,unwrap:?",
+      PrimitiveIterator: "i|Iterator,Object|forEachRemaining:void,hasNext:boolean,next:?,remove:void",
+      "PrimitiveIterator.OfDouble": "i|Iterator,Object,PrimitiveIterator|forEachRemaining:void,hasNext:boolean,next:Double,nextDouble:double,remove:void",
+      "PrimitiveIterator.OfInt": "i|Iterator,Object,PrimitiveIterator|forEachRemaining:void,hasNext:boolean,next:Integer,nextInt:int,remove:void",
+      "PrimitiveIterator.OfLong": "i|Iterator,Object,PrimitiveIterator|forEachRemaining:void,hasNext:boolean,next:Long,nextLong:long,remove:void",
+      PrintStream: "|Appendable,AutoCloseable,Closeable,FilterOutputStream,Flushable,Object,OutputStream|append:PrintStream,charset:Charset,checkError:boolean,close:void,flush:void,format:PrintStream,nullOutputStream:OutputStream,print:void,printf:PrintStream,println:void,write:void,writeBytes:void",
+      PrintWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,Writer|append:PrintWriter,checkError:boolean,close:void,flush:void,format:PrintWriter,nullWriter:Writer,print:void,printf:PrintWriter,println:void,write:void",
+      PriorityBlockingQueue: "|AbstractCollection,AbstractQueue,BlockingQueue,Collection,Iterable,Object,Queue,Serializable|add:boolean,addAll:boolean,clear:void,comparator:Comparator,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?",
+      PriorityQueue: "|AbstractCollection,AbstractQueue,Collection,Iterable,Object,Queue,Serializable|add:boolean,addAll:boolean,clear:void,comparator:Comparator,contains:boolean,containsAll:boolean,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Process: "|Object|children:Stream,descendants:Stream,destroy:void,destroyForcibly:Process,errorReader:BufferedReader,exitValue:int,getErrorStream:InputStream,getInputStream:InputStream,getOutputStream:OutputStream,info:Info,inputReader:BufferedReader,isAlive:boolean,onExit:CompletableFuture,outputWriter:BufferedWriter,pid:long,supportsNormalTermination:boolean,toHandle:ProcessHandle,waitFor:?",
+      ProcessBuilder: "f|Object|command:?,directory:?,environment:Map,inheritIO:ProcessBuilder,redirectError:?,redirectErrorStream:?,redirectInput:?,redirectOutput:?,start:Process,startPipeline:List",
+      "ProcessBuilder.Redirect": "|Object|appendTo:Redirect,file:File,from:Redirect,to:Redirect,type:Type",
+      "ProcessBuilder.Redirect.Type": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Type[]",
+      ProcessHandle: "i|Comparable,Object|allProcesses:Stream,children:Stream,compareTo:int,current:ProcessHandle,descendants:Stream,destroy:boolean,destroyForcibly:boolean,info:Info,isAlive:boolean,of:Optional,onExit:CompletableFuture,parent:Optional,pid:long,supportsNormalTermination:boolean",
+      "ProcessHandle.Info": "i|Object|arguments:Optional,command:Optional,commandLine:Optional,startInstant:Optional,totalCpuDuration:Optional,user:Optional",
+      Processor: "i|Object,Publisher,Subscriber|onComplete:void,onError:void,onNext:void,onSubscribe:void,subscribe:void",
+      Properties: "|Cloneable,Dictionary,Hashtable,Map,Object,Serializable|clear:void,clone:Object,compute:Object,computeIfAbsent:Object,computeIfPresent:Object,contains:boolean,containsKey:boolean,containsValue:boolean,elements:Enumeration,entrySet:Set,forEach:void,get:Object,getOrDefault:Object,getProperty:String,isEmpty:boolean,keySet:Set,keys:Enumeration,list:void,load:void,loadFromXML:void,merge:Object,propertyNames:Enumeration,put:Object,putAll:void,putIfAbsent:Object,remove:?,replace:?,replaceAll:void,save:void,setProperty:Object,size:int,store:void,storeToXML:void,stringPropertyNames:Set,values:Collection",
+      PropertyPermission: "f|BasicPermission,Guard,Object,Permission,Serializable|checkGuard:void,getActions:String,getName:String,implies:boolean,newPermissionCollection:PermissionCollection",
+      PropertyResourceBundle: "|Object,ResourceBundle|clearCache:void,containsKey:boolean,getBaseBundleName:String,getBundle:ResourceBundle,getKeys:Enumeration,getLocale:Locale,getObject:Object,getString:String,getStringArray:String[],handleGetObject:Object,keySet:Set",
+      Provider: "i|Object,Supplier|get:?,type:Class",
+      ProviderMismatchException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ProviderNotFoundException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      PseudoColumnUsage: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:PseudoColumnUsage[]",
+      Publisher: "i|Object|subscribe:void",
+      PushbackInputStream: "|AutoCloseable,Closeable,FilterInputStream,InputStream,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long,unread:void",
+      PushbackReader: "|AutoCloseable,Closeable,FilterReader,Object,Readable,Reader|close:void,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long,unread:void",
+      PutField: "|Object|put:void,write:void",
+      Queue: "i|Collection,Iterable,Object|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Random: "|Object,RandomGenerator,Serializable|doubles:DoubleStream,equiDoubles:DoubleStream,from:Random,ints:IntStream,isDeprecated:boolean,longs:LongStream,nextBoolean:boolean,nextBytes:void,nextDouble:double,nextExponential:double,nextFloat:float,nextGaussian:double,nextInt:int,nextLong:long,setSeed:void",
+      RandomAccess: "i|Object|",
+      RandomAccessFile: "|AutoCloseable,Closeable,DataInput,DataOutput,Object|close:void,getChannel:FileChannel,getFD:FileDescriptor,getFilePointer:long,length:long,read:int,readBoolean:boolean,readByte:byte,readChar:char,readDouble:double,readFloat:float,readFully:void,readInt:int,readLine:String,readLong:long,readShort:short,readUTF:String,readUnsignedByte:int,readUnsignedShort:int,seek:void,setLength:void,skipBytes:int,write:void,writeBoolean:void,writeByte:void,writeBytes:void,writeChar:void,writeChars:void,writeDouble:void,writeFloat:void,writeInt:void,writeLong:void,writeShort:void,writeUTF:void",
+      ReadLock: "|Lock,Object,Serializable|lock:void,lockInterruptibly:void,newCondition:Condition,tryLock:boolean,unlock:void",
+      ReadOnlyBufferException: "|Exception,Object,RuntimeException,Serializable,Throwable,UnsupportedOperationException|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ReadOnlyFileSystemException: "|Exception,Object,RuntimeException,Serializable,Throwable,UnsupportedOperationException|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ReadWriteLock: "i|Object|readLock:Lock,writeLock:Lock",
+      Readable: "i|Object|read:int",
+      Reader: "|AutoCloseable,Closeable,Object,Readable|close:void,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long",
+      Record: "|Object|",
+      RecursiveAction: "|ForkJoinTask,Future,Object,Serializable|adapt:ForkJoinTask,adaptInterruptible:ForkJoinTask,cancel:boolean,compareAndSetForkJoinTaskTag:boolean,complete:void,completeExceptionally:void,exceptionNow:Throwable,fork:ForkJoinTask,get:Void,getException:Throwable,getForkJoinTaskTag:short,getPool:ForkJoinPool,getQueuedTaskCount:int,getRawResult:Void,getSurplusQueuedTaskCount:int,helpQuiesce:void,inForkJoinPool:boolean,invoke:Void,invokeAll:?,isCancelled:boolean,isCompletedAbnormally:boolean,isCompletedNormally:boolean,isDone:boolean,join:Void,quietlyComplete:void,quietlyInvoke:void,quietlyJoin:?,quietlyJoinUninterruptibly:boolean,reinitialize:void,resultNow:Void,setForkJoinTaskTag:short,state:Future.State,tryUnfork:boolean",
+      RecursiveTask: "|ForkJoinTask,Future,Object,Serializable|adapt:ForkJoinTask,adaptInterruptible:ForkJoinTask,cancel:boolean,compareAndSetForkJoinTaskTag:boolean,complete:void,completeExceptionally:void,exceptionNow:Throwable,fork:ForkJoinTask,get:?,getException:Throwable,getForkJoinTaskTag:short,getPool:ForkJoinPool,getQueuedTaskCount:int,getRawResult:?,getSurplusQueuedTaskCount:int,helpQuiesce:void,inForkJoinPool:boolean,invoke:?,invokeAll:?,isCancelled:boolean,isCompletedAbnormally:boolean,isCompletedNormally:boolean,isDone:boolean,join:?,quietlyComplete:void,quietlyInvoke:void,quietlyJoin:?,quietlyJoinUninterruptibly:boolean,reinitialize:void,resultNow:?,setForkJoinTaskTag:short,state:Future.State,tryUnfork:boolean",
+      Redirect: "|Object|appendTo:Redirect,file:File,from:Redirect,to:Redirect,type:Type",
+      ReentrantLock: "|Lock,Object,Serializable|getHoldCount:int,getQueueLength:int,getWaitQueueLength:int,hasQueuedThread:boolean,hasQueuedThreads:boolean,hasWaiters:boolean,isFair:boolean,isHeldByCurrentThread:boolean,isLocked:boolean,lock:void,lockInterruptibly:void,newCondition:Condition,tryLock:boolean,unlock:void",
+      ReentrantReadWriteLock: "|Object,ReadWriteLock,Serializable|getQueueLength:int,getReadHoldCount:int,getReadLockCount:int,getWaitQueueLength:int,getWriteHoldCount:int,hasQueuedThread:boolean,hasQueuedThreads:boolean,hasWaiters:boolean,isFair:boolean,isWriteLocked:boolean,isWriteLockedByCurrentThread:boolean,readLock:ReadLock,writeLock:WriteLock",
+      "ReentrantReadWriteLock.ReadLock": "|Lock,Object,Serializable|lock:void,lockInterruptibly:void,newCondition:Condition,tryLock:boolean,unlock:void",
+      "ReentrantReadWriteLock.WriteLock": "|Lock,Object,Serializable|getHoldCount:int,isHeldByCurrentThread:boolean,lock:void,lockInterruptibly:void,newCondition:Condition,tryLock:boolean,unlock:void",
+      Ref: "i|Object|getBaseTypeName:String,getObject:Object,setObject:void",
+      ReflectiveOperationException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      RejectedExecutionException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      RejectedExecutionHandler: "i|Object|rejectedExecution:void",
+      ResolverStyle: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:ResolverStyle[]",
+      ResourceBundle: "|Object|clearCache:void,containsKey:boolean,getBaseBundleName:String,getBundle:ResourceBundle,getKeys:Enumeration,getLocale:Locale,getObject:Object,getString:String,getStringArray:String[],keySet:Set",
+      "ResourceBundle.Control": "|Object|getCandidateLocales:List,getControl:Control,getFallbackLocale:Locale,getFormats:List,getNoFallbackControl:Control,getTimeToLive:long,needsReload:boolean,newBundle:ResourceBundle,toBundleName:String,toResourceName:String",
+      ResultSet: "i|AutoCloseable,Object,Wrapper|absolute:boolean,afterLast:void,beforeFirst:void,cancelRowUpdates:void,clearWarnings:void,close:void,deleteRow:void,findColumn:int,first:boolean,getArray:Array,getAsciiStream:InputStream,getBigDecimal:BigDecimal,getBinaryStream:InputStream,getBlob:Blob,getBoolean:boolean,getByte:byte,getBytes:byte[],getCharacterStream:Reader,getClob:Clob,getConcurrency:int,getCursorName:String,getDate:?,getDouble:double,getFetchDirection:int,getFetchSize:int,getFloat:float,getHoldability:int,getInt:int,getLong:long,getMetaData:ResultSetMetaData,getNCharacterStream:Reader,getNClob:NClob,getNString:String,getObject:?,getRef:Ref,getRow:int,getRowId:RowId,getSQLXML:SQLXML,getShort:short,getStatement:Statement,getString:String,getTime:Time,getTimestamp:Timestamp,getType:int,getURL:URL,getUnicodeStream:InputStream,getWarnings:SQLWarning,insertRow:void,isAfterLast:boolean,isBeforeFirst:boolean,isClosed:boolean,isFirst:boolean,isLast:boolean,isWrapperFor:boolean,last:boolean,moveToCurrentRow:void,moveToInsertRow:void,next:boolean,previous:boolean,refreshRow:void,relative:boolean,rowDeleted:boolean,rowInserted:boolean,rowUpdated:boolean,setFetchDirection:void,setFetchSize:void,unwrap:?,updateArray:void,updateAsciiStream:void,updateBigDecimal:void,updateBinaryStream:void,updateBlob:void,updateBoolean:void,updateByte:void,updateBytes:void,updateCharacterStream:void,updateClob:void,updateDate:void,updateDouble:void,updateFloat:void,updateInt:void,updateLong:void,updateNCharacterStream:void,updateNClob:void,updateNString:void,updateNull:void,updateObject:void,updateRef:void,updateRow:void,updateRowId:void,updateSQLXML:void,updateShort:void,updateString:void,updateTime:void,updateTimestamp:void,wasNull:boolean",
+      ResultSetMetaData: "i|Object,Wrapper|getCatalogName:String,getColumnClassName:String,getColumnCount:int,getColumnDisplaySize:int,getColumnLabel:String,getColumnName:String,getColumnType:int,getColumnTypeName:String,getPrecision:int,getScale:int,getSchemaName:String,getTableName:String,isAutoIncrement:boolean,isCaseSensitive:boolean,isCurrency:boolean,isDefinitelyWritable:boolean,isNullable:int,isReadOnly:boolean,isSearchable:boolean,isSigned:boolean,isWrapperFor:boolean,isWritable:boolean,unwrap:?",
+      RoundingMode: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:RoundingMode[]",
+      RowId: "i|Object|getBytes:byte[]",
+      RowIdLifetime: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:RowIdLifetime[]",
+      Runnable: "i|Object|run:void",
+      RunnableFuture: "i|Future,Object,Runnable|cancel:boolean,exceptionNow:Throwable,get:?,isCancelled:boolean,isDone:boolean,resultNow:?,run:void,state:Future.State",
+      RunnableScheduledFuture: "i|Comparable,Delayed,Future,Object,Runnable,RunnableFuture,ScheduledFuture|cancel:boolean,compareTo:int,exceptionNow:Throwable,get:?,getDelay:long,isCancelled:boolean,isDone:boolean,isPeriodic:boolean,resultNow:?,run:void,state:Future.State",
+      Runtime: "f|Object|addShutdownHook:void,availableProcessors:int,exec:Process,exit:void,freeMemory:long,gc:void,getRuntime:Runtime,halt:void,load:void,loadLibrary:void,maxMemory:long,removeShutdownHook:boolean,runFinalization:void,totalMemory:long,version:Version",
+      "Runtime.Version": "f|Comparable,Object|build:Optional,compareTo:int,compareToIgnoreOptional:int,equalsIgnoreOptional:boolean,feature:int,interim:int,major:int,minor:int,optional:Optional,parse:Version,patch:int,pre:Optional,security:int,update:int,version:List",
+      RuntimeException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      RuntimePermission: "f|BasicPermission,Guard,Object,Permission,Serializable|checkGuard:void,getActions:String,getName:String,implies:boolean,newPermissionCollection:PermissionCollection",
+      SQLClientInfoException: "|Exception,Iterable,Object,SQLException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getFailedProperties:Map,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLData: "i|Object|getSQLTypeName:String,readSQL:void,writeSQL:void",
+      SQLDataException: "|Exception,Iterable,Object,SQLException,SQLNonTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLException: "|Exception,Iterable,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLFeatureNotSupportedException: "|Exception,Iterable,Object,SQLException,SQLNonTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLInput: "i|Object|readArray:Array,readAsciiStream:InputStream,readBigDecimal:BigDecimal,readBinaryStream:InputStream,readBlob:Blob,readBoolean:boolean,readByte:byte,readBytes:byte[],readCharacterStream:Reader,readClob:Clob,readDate:?,readDouble:double,readFloat:float,readInt:int,readLong:long,readNClob:NClob,readNString:String,readObject:?,readRef:Ref,readRowId:RowId,readSQLXML:SQLXML,readShort:short,readString:String,readTime:Time,readTimestamp:Timestamp,readURL:URL,wasNull:boolean",
+      SQLIntegrityConstraintViolationException: "|Exception,Iterable,Object,SQLException,SQLNonTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLInvalidAuthorizationSpecException: "|Exception,Iterable,Object,SQLException,SQLNonTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLNonTransientConnectionException: "|Exception,Iterable,Object,SQLException,SQLNonTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLNonTransientException: "|Exception,Iterable,Object,SQLException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLOutput: "i|Object|writeArray:void,writeAsciiStream:void,writeBigDecimal:void,writeBinaryStream:void,writeBlob:void,writeBoolean:void,writeByte:void,writeBytes:void,writeCharacterStream:void,writeClob:void,writeDate:void,writeDouble:void,writeFloat:void,writeInt:void,writeLong:void,writeNClob:void,writeNString:void,writeObject:void,writeRef:void,writeRowId:void,writeSQLXML:void,writeShort:void,writeString:void,writeStruct:void,writeTime:void,writeTimestamp:void,writeURL:void",
+      SQLPermission: "f|BasicPermission,Guard,Object,Permission,Serializable|checkGuard:void,getActions:String,getName:String,implies:boolean,newPermissionCollection:PermissionCollection",
+      SQLRecoverableException: "|Exception,Iterable,Object,SQLException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLSyntaxErrorException: "|Exception,Iterable,Object,SQLException,SQLNonTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLTimeoutException: "|Exception,Iterable,Object,SQLException,SQLTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLTransactionRollbackException: "|Exception,Iterable,Object,SQLException,SQLTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLTransientConnectionException: "|Exception,Iterable,Object,SQLException,SQLTransientException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLTransientException: "|Exception,Iterable,Object,SQLException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setStackTrace:void,spliterator:Spliterator",
+      SQLType: "i|Object|getName:String,getVendor:String,getVendorTypeNumber:Integer",
+      SQLWarning: "|Exception,Iterable,Object,SQLException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,forEach:void,getCause:Throwable,getErrorCode:int,getLocalizedMessage:String,getMessage:String,getNextException:SQLException,getNextWarning:SQLWarning,getSQLState:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,iterator:Iterator,printStackTrace:void,setNextException:void,setNextWarning:void,setStackTrace:void,spliterator:Spliterator",
+      SQLXML: "i|Object|free:void,getBinaryStream:InputStream,getCharacterStream:Reader,getSource:?,getString:String,setBinaryStream:OutputStream,setCharacterStream:Writer,setResult:?,setString:void",
+      SafeVarargs: "i|Annotation,Object|annotationType:Class",
+      Savepoint: "i|Object|getSavepointId:int,getSavepointName:String",
+      Scanner: "f|AutoCloseable,Closeable,Iterator,Object|close:void,delimiter:Pattern,findAll:Stream,findInLine:String,findWithinHorizon:String,forEachRemaining:void,hasNext:boolean,hasNextBigDecimal:boolean,hasNextBigInteger:boolean,hasNextBoolean:boolean,hasNextByte:boolean,hasNextDouble:boolean,hasNextFloat:boolean,hasNextInt:boolean,hasNextLine:boolean,hasNextLong:boolean,hasNextShort:boolean,ioException:IOException,locale:Locale,match:MatchResult,next:String,nextBigDecimal:BigDecimal,nextBigInteger:BigInteger,nextBoolean:boolean,nextByte:byte,nextDouble:double,nextFloat:float,nextInt:int,nextLine:String,nextLong:long,nextShort:short,radix:int,remove:void,reset:Scanner,skip:Scanner,tokens:Stream,useDelimiter:Scanner,useLocale:Scanner,useRadix:Scanner",
+      ScheduledExecutorService: "i|AutoCloseable,Executor,ExecutorService,Object|awaitTermination:boolean,close:void,execute:void,invokeAll:List,invokeAny:?,isShutdown:boolean,isTerminated:boolean,schedule:ScheduledFuture,scheduleAtFixedRate:ScheduledFuture,scheduleWithFixedDelay:ScheduledFuture,shutdown:void,shutdownNow:List,submit:Future",
+      ScheduledFuture: "i|Comparable,Delayed,Future,Object|cancel:boolean,compareTo:int,exceptionNow:Throwable,get:?,getDelay:long,isCancelled:boolean,isDone:boolean,resultNow:?,state:Future.State",
+      ScheduledThreadPoolExecutor: "|AbstractExecutorService,AutoCloseable,Executor,ExecutorService,Object,ScheduledExecutorService,ThreadPoolExecutor|allowCoreThreadTimeOut:void,allowsCoreThreadTimeOut:boolean,awaitTermination:boolean,close:void,execute:void,getActiveCount:int,getCompletedTaskCount:long,getContinueExistingPeriodicTasksAfterShutdownPolicy:boolean,getCorePoolSize:int,getExecuteExistingDelayedTasksAfterShutdownPolicy:boolean,getKeepAliveTime:long,getLargestPoolSize:int,getMaximumPoolSize:int,getPoolSize:int,getQueue:BlockingQueue,getRejectedExecutionHandler:RejectedExecutionHandler,getRemoveOnCancelPolicy:boolean,getTaskCount:long,getThreadFactory:ThreadFactory,invokeAll:List,invokeAny:?,isShutdown:boolean,isTerminated:boolean,isTerminating:boolean,prestartAllCoreThreads:int,prestartCoreThread:boolean,purge:void,remove:boolean,schedule:ScheduledFuture,scheduleAtFixedRate:ScheduledFuture,scheduleWithFixedDelay:ScheduledFuture,setContinueExistingPeriodicTasksAfterShutdownPolicy:void,setCorePoolSize:void,setExecuteExistingDelayedTasksAfterShutdownPolicy:void,setKeepAliveTime:void,setMaximumPoolSize:void,setRejectedExecutionHandler:void,setRemoveOnCancelPolicy:void,setThreadFactory:void,shutdown:void,shutdownNow:List,submit:Future",
+      ScopedValue: "f|Object|get:?,isBound:boolean,newInstance:ScopedValue,orElse:?,orElseThrow:?,where:Carrier",
+      "ScopedValue.CallableOp": "i|Object|call:?",
+      "ScopedValue.Carrier": "f|Object|call:?,get:?,run:void,where:Carrier",
+      SecureDirectoryStream: "i|AutoCloseable,Closeable,DirectoryStream,Iterable,Object|close:void,deleteDirectory:void,deleteFile:void,forEach:void,getFileAttributeView:?,iterator:Iterator,move:void,newByteChannel:SeekableByteChannel,newDirectoryStream:SecureDirectoryStream,spliterator:Spliterator",
+      SecurityException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      SecurityManager: "|Object|checkAccept:void,checkAccess:void,checkConnect:void,checkCreateClassLoader:void,checkDelete:void,checkExec:void,checkExit:void,checkLink:void,checkListen:void,checkMulticast:void,checkPackageAccess:void,checkPackageDefinition:void,checkPermission:void,checkPrintJobAccess:void,checkPropertiesAccess:void,checkPropertyAccess:void,checkRead:void,checkSecurityAccess:void,checkSetFactory:void,checkWrite:void,getSecurityContext:Object,getThreadGroup:ThreadGroup",
+      Semaphore: "|Object,Serializable|acquire:void,acquireUninterruptibly:void,availablePermits:int,drainPermits:int,getQueueLength:int,hasQueuedThreads:boolean,isFair:boolean,release:void,tryAcquire:boolean",
+      SequenceInputStream: "|AutoCloseable,Closeable,InputStream,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      SequencedCollection: "i|Collection,Iterable,Object|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,retainAll:boolean,reversed:SequencedCollection,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      SequencedMap: "i|Map,Object|clear:void,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,firstEntry:Entry,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,lastEntry:Entry,merge:?,pollFirstEntry:Entry,pollLastEntry:Entry,put:?,putAll:void,putFirst:?,putIfAbsent:?,putLast:?,remove:?,replace:?,replaceAll:void,reversed:SequencedMap,sequencedEntrySet:SequencedSet,sequencedKeySet:SequencedSet,sequencedValues:SequencedCollection,size:int,values:Collection",
+      SequencedSet: "i|Collection,Iterable,Object,SequencedCollection,Set|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,contains:boolean,containsAll:boolean,forEach:void,getFirst:?,getLast:?,isEmpty:boolean,iterator:Iterator,parallelStream:Stream,remove:boolean,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,retainAll:boolean,reversed:SequencedSet,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      Serial: "i|Annotation,Object|annotationType:Class",
+      Serializable: "i|Object|",
+      SerializablePermission: "f|BasicPermission,Guard,Object,Permission,Serializable|checkGuard:void,getActions:String,getName:String,implies:boolean,newPermissionCollection:PermissionCollection",
+      ServiceConfigurationError: "|Error,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ServiceLoader: "f|Iterable,Object|findFirst:Optional,forEach:void,iterator:Iterator,load:ServiceLoader,loadInstalled:ServiceLoader,reload:void,spliterator:Spliterator,stream:Stream",
+      "ServiceLoader.Provider": "i|Object,Supplier|get:?,type:Class",
+      Set: "i|Collection,Iterable,Object|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,copyOf:Set,forEach:void,isEmpty:boolean,iterator:Iterator,of:Set,parallelStream:Stream,remove:boolean,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,toArray:?",
+      ShardingKey: "i|Object|",
+      ShardingKeyBuilder: "i|Object|build:ShardingKey,subkey:ShardingKeyBuilder",
+      Short: "f|Comparable,Constable,Number,Object,Serializable|byteValue:byte,compare:int,compareTo:int,compareUnsigned:int,decode:Short,describeConstable:Optional,doubleValue:double,floatValue:float,intValue:int,longValue:long,parseShort:short,reverseBytes:short,shortValue:short,toUnsignedInt:int,toUnsignedLong:long,valueOf:Short",
+      ShortBuffer: "|Buffer,Comparable,Object|allocate:ShortBuffer,array:short[],arrayOffset:int,asReadOnlyBuffer:ShortBuffer,capacity:int,clear:ShortBuffer,compact:ShortBuffer,compareTo:int,duplicate:ShortBuffer,flip:ShortBuffer,get:?,hasArray:boolean,hasRemaining:boolean,isDirect:boolean,isReadOnly:boolean,limit:?,mark:ShortBuffer,mismatch:int,order:ByteOrder,position:?,put:ShortBuffer,remaining:int,reset:ShortBuffer,rewind:ShortBuffer,slice:ShortBuffer,wrap:ShortBuffer",
+      SignStyle: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:SignStyle[]",
+      SimpleEntry: "|Entry,Object,Serializable|getKey:?,getValue:?,setValue:?",
+      SimpleFileVisitor: "|FileVisitor,Object|postVisitDirectory:FileVisitResult,preVisitDirectory:FileVisitResult,visitFile:FileVisitResult,visitFileFailed:FileVisitResult",
+      SimpleImmutableEntry: "|Entry,Object,Serializable|getKey:?,getValue:?,setValue:?",
+      SimpleTimeZone: "|Cloneable,Object,Serializable,TimeZone|availableIDs:Stream,clone:Object,getAvailableIDs:String[],getDSTSavings:int,getDefault:TimeZone,getDisplayName:String,getID:String,getOffset:int,getRawOffset:int,getTimeZone:TimeZone,hasSameRules:boolean,inDaylightTime:boolean,observesDaylightTime:boolean,setDSTSavings:void,setDefault:void,setEndRule:void,setID:void,setRawOffset:void,setStartRule:void,setStartYear:void,toZoneId:ZoneId,useDaylightTime:boolean",
+      SortedMap: "i|Map,Object,SequencedMap|clear:void,comparator:Comparator,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,firstEntry:Entry,firstKey:?,forEach:void,get:?,getOrDefault:?,headMap:SortedMap,isEmpty:boolean,keySet:Set,lastEntry:Entry,lastKey:?,merge:?,pollFirstEntry:Entry,pollLastEntry:Entry,put:?,putAll:void,putFirst:?,putIfAbsent:?,putLast:?,remove:?,replace:?,replaceAll:void,reversed:SortedMap,sequencedEntrySet:SequencedSet,sequencedKeySet:SequencedSet,sequencedValues:SequencedCollection,size:int,subMap:SortedMap,tailMap:SortedMap,values:Collection",
+      SortedSet: "i|Collection,Iterable,Object,SequencedCollection,SequencedSet,Set|add:boolean,addAll:boolean,addFirst:void,addLast:void,clear:void,comparator:Comparator,contains:boolean,containsAll:boolean,first:?,forEach:void,getFirst:?,getLast:?,headSet:SortedSet,isEmpty:boolean,iterator:Iterator,last:?,parallelStream:Stream,remove:boolean,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,retainAll:boolean,reversed:SortedSet,size:int,spliterator:Spliterator,stream:Stream,subSet:SortedSet,tailSet:SortedSet,toArray:?",
+      Spliterator: "i|Object|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator",
+      "Spliterator.OfDouble": "i|Object,OfPrimitive,Spliterator|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfDouble",
+      "Spliterator.OfInt": "i|Object,OfPrimitive,Spliterator|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfInt",
+      "Spliterator.OfLong": "i|Object,OfPrimitive,Spliterator|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfLong",
+      "Spliterator.OfPrimitive": "i|Object,Spliterator|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:?",
+      Spliterators: "f|Object|emptyDoubleSpliterator:Spliterator.OfDouble,emptyIntSpliterator:Spliterator.OfInt,emptyLongSpliterator:Spliterator.OfLong,emptySpliterator:Spliterator,iterator:?,spliterator:?,spliteratorUnknownSize:?",
+      "Spliterators.AbstractDoubleSpliterator": "|Object,OfPrimitive,Spliterator,Spliterator.OfDouble|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfDouble",
+      "Spliterators.AbstractIntSpliterator": "|Object,OfPrimitive,Spliterator,Spliterator.OfInt|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfInt",
+      "Spliterators.AbstractLongSpliterator": "|Object,OfPrimitive,Spliterator,Spliterator.OfLong|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator.OfLong",
+      "Spliterators.AbstractSpliterator": "|Object,Spliterator|characteristics:int,estimateSize:long,forEachRemaining:void,getComparator:Comparator,getExactSizeIfKnown:long,hasCharacteristics:boolean,tryAdvance:boolean,trySplit:Spliterator",
+      SplittableRandom: "f|Object,RandomGenerator,SplittableGenerator,StreamableGenerator|doubles:DoubleStream,equiDoubles:DoubleStream,ints:IntStream,isDeprecated:boolean,longs:LongStream,nextBoolean:boolean,nextBytes:void,nextDouble:double,nextExponential:double,nextFloat:float,nextGaussian:double,nextInt:int,nextLong:long,rngs:Stream,split:SplittableRandom,splits:Stream",
+      StableValue: "i|Object|function:Function,intFunction:IntFunction,isSet:boolean,list:List,map:Map,of:StableValue,orElse:?,orElseSet:?,orElseThrow:?,setOrThrow:void,supplier:Supplier,trySet:boolean",
+      Stack: "|AbstractCollection,AbstractList,Cloneable,Collection,Iterable,List,Object,RandomAccess,SequencedCollection,Serializable,Vector|add:?,addAll:boolean,addElement:void,addFirst:void,addLast:void,capacity:int,clear:void,clone:Object,contains:boolean,containsAll:boolean,copyInto:void,elementAt:?,elements:Enumeration,empty:boolean,ensureCapacity:void,firstElement:?,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,insertElementAt:void,isEmpty:boolean,iterator:Iterator,lastElement:?,lastIndexOf:int,listIterator:ListIterator,parallelStream:Stream,peek:?,pop:?,push:?,remove:?,removeAll:boolean,removeAllElements:void,removeElement:boolean,removeElementAt:void,removeFirst:?,removeIf:boolean,removeLast:?,replaceAll:void,retainAll:boolean,reversed:List,search:int,set:?,setElementAt:void,setSize:void,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?,trimToSize:void",
+      StackFrame: "i|Object|getByteCodeIndex:int,getClassName:String,getDeclaringClass:Class,getDescriptor:String,getFileName:String,getLineNumber:int,getMethodName:String,getMethodType:MethodType,isNativeMethod:boolean,toStackTraceElement:StackTraceElement",
+      StackOverflowError: "|Error,Object,Serializable,Throwable,VirtualMachineError|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      StackTraceElement: "f|Object,Serializable|getClassLoaderName:String,getClassName:String,getFileName:String,getLineNumber:int,getMethodName:String,getModuleName:String,getModuleVersion:String,isNativeMethod:boolean",
+      StackWalker: "f|Object|forEach:void,getCallerClass:Class,getInstance:StackWalker,walk:?",
+      "StackWalker.Option": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Option[]",
+      "StackWalker.StackFrame": "i|Object|getByteCodeIndex:int,getClassName:String,getDeclaringClass:Class,getDescriptor:String,getFileName:String,getLineNumber:int,getMethodName:String,getMethodType:MethodType,isNativeMethod:boolean,toStackTraceElement:StackTraceElement",
+      StampedLock: "|Object,Serializable|asReadLock:Lock,asReadWriteLock:ReadWriteLock,asWriteLock:Lock,getReadLockCount:int,isLockStamp:boolean,isOptimisticReadStamp:boolean,isReadLockStamp:boolean,isReadLocked:boolean,isWriteLockStamp:boolean,isWriteLocked:boolean,readLock:long,readLockInterruptibly:long,tryConvertToOptimisticRead:long,tryConvertToReadLock:long,tryConvertToWriteLock:long,tryOptimisticRead:long,tryReadLock:long,tryUnlockRead:boolean,tryUnlockWrite:boolean,tryWriteLock:long,unlock:void,unlockRead:void,unlockWrite:void,validate:boolean,writeLock:long,writeLockInterruptibly:long",
+      StandardCharsets: "f|Object|",
+      StandardCopyOption: "f|Comparable,Constable,CopyOption,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:StandardCopyOption[]",
+      StandardOpenOption: "f|Comparable,Constable,Enum,Object,OpenOption,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:StandardOpenOption[]",
+      StandardWatchEventKinds: "f|Object|",
+      State: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:State[]",
+      Statement: "i|AutoCloseable,Object,Wrapper|addBatch:void,cancel:void,clearBatch:void,clearWarnings:void,close:void,closeOnCompletion:void,enquoteIdentifier:String,enquoteLiteral:String,enquoteNCharLiteral:String,execute:boolean,executeBatch:int[],executeLargeBatch:long[],executeLargeUpdate:long,executeQuery:ResultSet,executeUpdate:int,getConnection:Connection,getFetchDirection:int,getFetchSize:int,getGeneratedKeys:ResultSet,getLargeMaxRows:long,getLargeUpdateCount:long,getMaxFieldSize:int,getMaxRows:int,getMoreResults:boolean,getQueryTimeout:int,getResultSet:ResultSet,getResultSetConcurrency:int,getResultSetHoldability:int,getResultSetType:int,getUpdateCount:int,getWarnings:SQLWarning,isCloseOnCompletion:boolean,isClosed:boolean,isPoolable:boolean,isSimpleIdentifier:boolean,isWrapperFor:boolean,setCursorName:void,setEscapeProcessing:void,setFetchDirection:void,setFetchSize:void,setLargeMaxRows:void,setMaxFieldSize:void,setMaxRows:void,setPoolable:void,setQueryTimeout:void,unwrap:?",
+      Status: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Status[]",
+      Stream: "i|AutoCloseable,BaseStream,Object|allMatch:boolean,anyMatch:boolean,builder:Stream.Builder,close:void,collect:?,concat:Stream,count:long,distinct:Stream,dropWhile:Stream,empty:Stream,filter:Stream,findAny:Optional,findFirst:Optional,flatMap:Stream,flatMapToDouble:DoubleStream,flatMapToInt:IntStream,flatMapToLong:LongStream,forEach:void,forEachOrdered:void,gather:Stream,generate:Stream,isParallel:boolean,iterate:Stream,iterator:Iterator,limit:Stream,map:Stream,mapMulti:Stream,mapMultiToDouble:DoubleStream,mapMultiToInt:IntStream,mapMultiToLong:LongStream,mapToDouble:DoubleStream,mapToInt:IntStream,mapToLong:LongStream,max:Optional,min:Optional,noneMatch:boolean,of:Stream,ofNullable:Stream,onClose:Stream,parallel:Stream,peek:Stream,reduce:?,sequential:Stream,skip:Stream,sorted:Stream,spliterator:Spliterator,takeWhile:Stream,toArray:?,toList:List,unordered:Stream",
+      "Stream.Builder": "i|Consumer,Object|accept:void,add:Stream.Builder,andThen:Consumer,build:Stream",
+      StreamCorruptedException: "|Exception,IOException,Object,ObjectStreamException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      StreamSupport: "f|Object|doubleStream:DoubleStream,intStream:IntStream,longStream:LongStream,stream:Stream",
+      StreamTokenizer: "|Object|commentChar:void,eolIsSignificant:void,lineno:int,lowerCaseMode:void,nextToken:int,ordinaryChar:void,ordinaryChars:void,parseNumbers:void,pushBack:void,quoteChar:void,resetSyntax:void,slashSlashComments:void,slashStarComments:void,whitespaceChars:void,wordChars:void",
+      StrictMath: "f|Object|IEEEremainder:double,abs:?,absExact:?,acos:double,addExact:?,asin:double,atan:double,atan2:double,cbrt:double,ceil:double,ceilDiv:?,ceilDivExact:?,ceilMod:?,clamp:?,copySign:?,cos:double,cosh:double,decrementExact:?,divideExact:?,exp:double,expm1:double,floor:double,floorDiv:?,floorDivExact:?,floorMod:?,fma:?,getExponent:int,hypot:double,incrementExact:?,log:double,log10:double,log1p:double,max:?,min:?,multiplyExact:?,multiplyFull:long,multiplyHigh:long,negateExact:?,nextAfter:?,nextDown:?,nextUp:?,pow:double,powExact:?,random:double,rint:double,round:?,scalb:?,signum:?,sin:double,sinh:double,sqrt:double,subtractExact:?,tan:double,tanh:double,toDegrees:double,toIntExact:int,toRadians:double,ulp:?,unsignedMultiplyExact:?,unsignedMultiplyHigh:long,unsignedPowExact:?",
+      String: "f|CharSequence,Comparable,Constable,ConstantDesc,Object,Serializable|charAt:char,chars:IntStream,codePointAt:int,codePointBefore:int,codePointCount:int,codePoints:IntStream,compareTo:int,compareToIgnoreCase:int,concat:String,contains:boolean,contentEquals:boolean,copyValueOf:String,describeConstable:Optional,endsWith:boolean,equalsIgnoreCase:boolean,format:String,formatted:String,getBytes:?,getChars:void,indent:String,indexOf:int,intern:String,isBlank:boolean,isEmpty:boolean,join:String,lastIndexOf:int,length:int,lines:Stream,matches:boolean,offsetByCodePoints:int,regionMatches:boolean,repeat:String,replace:String,replaceAll:String,replaceFirst:String,resolveConstantDesc:String,split:String[],splitWithDelimiters:String[],startsWith:boolean,strip:String,stripIndent:String,stripLeading:String,stripTrailing:String,subSequence:CharSequence,substring:String,toCharArray:char[],toLowerCase:String,toUpperCase:String,transform:?,translateEscapes:String,trim:String,valueOf:String",
+      StringBuffer: "f|Appendable,CharSequence,Comparable,Object,Serializable|append:StringBuffer,appendCodePoint:StringBuffer,capacity:int,charAt:char,chars:IntStream,codePointAt:int,codePointBefore:int,codePointCount:int,codePoints:IntStream,compareTo:int,delete:StringBuffer,deleteCharAt:StringBuffer,ensureCapacity:void,getChars:void,indexOf:int,insert:StringBuffer,isEmpty:boolean,lastIndexOf:int,length:int,offsetByCodePoints:int,repeat:StringBuffer,replace:StringBuffer,reverse:StringBuffer,setCharAt:void,setLength:void,subSequence:CharSequence,substring:String,trimToSize:void",
+      StringBufferInputStream: "|AutoCloseable,Closeable,InputStream,Object|available:int,close:void,mark:void,markSupported:boolean,nullInputStream:InputStream,read:int,readAllBytes:byte[],readNBytes:?,reset:void,skip:long,skipNBytes:void,transferTo:long",
+      StringBuilder: "f|Appendable,CharSequence,Comparable,Object,Serializable|append:StringBuilder,appendCodePoint:StringBuilder,capacity:int,charAt:char,chars:IntStream,codePointAt:int,codePointBefore:int,codePointCount:int,codePoints:IntStream,compareTo:int,delete:StringBuilder,deleteCharAt:StringBuilder,ensureCapacity:void,getChars:void,indexOf:int,insert:StringBuilder,isEmpty:boolean,lastIndexOf:int,length:int,offsetByCodePoints:int,repeat:StringBuilder,replace:StringBuilder,reverse:StringBuilder,setCharAt:void,setLength:void,subSequence:CharSequence,substring:String,trimToSize:void",
+      StringIndexOutOfBoundsException: "|Exception,IndexOutOfBoundsException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      StringJoiner: "f|Object|add:StringJoiner,length:int,merge:StringJoiner,setEmptyValue:StringJoiner",
+      StringReader: "|AutoCloseable,Closeable,Object,Readable,Reader|close:void,mark:void,markSupported:boolean,nullReader:Reader,of:Reader,read:int,readAllAsString:String,readAllLines:List,ready:boolean,reset:void,skip:long,transferTo:long",
+      StringTokenizer: "|Enumeration,Object|asIterator:Iterator,countTokens:int,hasMoreElements:boolean,hasMoreTokens:boolean,nextElement:Object,nextToken:String",
+      StringWriter: "|Appendable,AutoCloseable,Closeable,Flushable,Object,Writer|append:StringWriter,close:void,flush:void,getBuffer:StringBuffer,nullWriter:Writer,write:void",
+      Struct: "i|Object|getAttributes:Object[],getSQLTypeName:String",
+      StructureViolationException: "f|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      StructuredTaskScope: "i|AutoCloseable,Object|close:void,fork:Subtask,isCancelled:boolean,join:?,open:StructuredTaskScope",
+      "StructuredTaskScope.Configuration": "i|Object|withName:Configuration,withThreadFactory:Configuration,withTimeout:Configuration",
+      "StructuredTaskScope.FailedException": "f|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      "StructuredTaskScope.Joiner": "i|Object|allSuccessfulOrThrow:Joiner,allUntil:Joiner,anySuccessfulResultOrThrow:Joiner,awaitAll:Joiner,awaitAllSuccessfulOrThrow:Joiner,onComplete:boolean,onFork:boolean,result:?",
+      "StructuredTaskScope.Subtask": "i|Object,Supplier|exception:Throwable,get:?,state:StructuredTaskScope.Subtask.State",
+      "StructuredTaskScope.Subtask.State": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:StructuredTaskScope.Subtask.State[]",
+      "StructuredTaskScope.TimeoutException": "f|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      SubmissionPublisher: "|AutoCloseable,Object,Publisher|close:void,closeExceptionally:void,consume:CompletableFuture,estimateMaximumLag:int,estimateMinimumDemand:long,getClosedException:Throwable,getExecutor:Executor,getMaxBufferCapacity:int,getNumberOfSubscribers:int,getSubscribers:List,hasSubscribers:boolean,isClosed:boolean,isSubscribed:boolean,offer:int,submit:int,subscribe:void",
+      Subscriber: "i|Object|onComplete:void,onError:void,onNext:void,onSubscribe:void",
+      Subscription: "i|Object|cancel:void,request:void",
+      Subset: "|Object|",
+      Subtask: "i|Object,Supplier|exception:Throwable,get:?,state:StructuredTaskScope.Subtask.State",
+      Supplier: "i|Object|get:?",
+      SuppressWarnings: "i|Annotation,Object|annotationType:Class,value:String[]",
+      SyncFailedException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      SynchronousQueue: "|AbstractCollection,AbstractQueue,BlockingQueue,Collection,Iterable,Object,Queue,Serializable|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?",
+      System: "f|Object|arraycopy:void,clearProperty:String,console:Console,currentTimeMillis:long,exit:void,gc:void,getLogger:Logger,getProperties:Properties,getProperty:String,getSecurityManager:SecurityManager,getenv:?,identityHashCode:int,inheritedChannel:Channel,lineSeparator:String,load:void,loadLibrary:void,mapLibraryName:String,nanoTime:long,runFinalization:void,setErr:void,setIn:void,setOut:void,setProperties:void,setProperty:String,setSecurityManager:void",
+      "System.Logger": "i|Object|getName:String,isLoggable:boolean,log:void",
+      "System.Logger.Level": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,getName:String,getSeverity:int,name:String,ordinal:int,valueOf:?,values:Level[]",
+      "System.LoggerFinder": "|Object|getLocalizedLogger:Logger,getLogger:Logger,getLoggerFinder:LoggerFinder",
+      Temporal: "i|Object,TemporalAccessor|get:int,getLong:long,isSupported:boolean,minus:Temporal,plus:Temporal,query:?,range:ValueRange,until:long,with:Temporal",
+      TemporalAccessor: "i|Object|get:int,getLong:long,isSupported:boolean,query:?,range:ValueRange",
+      TemporalAdjuster: "i|Object|adjustInto:Temporal",
+      TemporalAdjusters: "f|Object|dayOfWeekInMonth:TemporalAdjuster,firstDayOfMonth:TemporalAdjuster,firstDayOfNextMonth:TemporalAdjuster,firstDayOfNextYear:TemporalAdjuster,firstDayOfYear:TemporalAdjuster,firstInMonth:TemporalAdjuster,lastDayOfMonth:TemporalAdjuster,lastDayOfYear:TemporalAdjuster,lastInMonth:TemporalAdjuster,next:TemporalAdjuster,nextOrSame:TemporalAdjuster,ofDateAdjuster:TemporalAdjuster,previous:TemporalAdjuster,previousOrSame:TemporalAdjuster",
+      TemporalAmount: "i|Object|addTo:Temporal,get:long,getUnits:List,subtractFrom:Temporal",
+      TemporalField: "i|Object|adjustInto:?,getBaseUnit:TemporalUnit,getDisplayName:String,getFrom:long,getRangeUnit:TemporalUnit,isDateBased:boolean,isSupportedBy:boolean,isTimeBased:boolean,range:ValueRange,rangeRefinedBy:ValueRange,resolve:TemporalAccessor",
+      TemporalQueries: "f|Object|chronology:TemporalQuery,localDate:TemporalQuery,localTime:TemporalQuery,offset:TemporalQuery,precision:TemporalQuery,zone:TemporalQuery,zoneId:TemporalQuery",
+      TemporalQuery: "i|Object|queryFrom:?",
+      TemporalUnit: "i|Object|addTo:?,between:long,getDuration:Duration,isDateBased:boolean,isDurationEstimated:boolean,isSupportedBy:boolean,isTimeBased:boolean",
+      TextStyle: "f|Comparable,Constable,Enum,Object,Serializable|asNormal:TextStyle,asStandalone:TextStyle,compareTo:int,describeConstable:Optional,getDeclaringClass:Class,isStandalone:boolean,name:String,ordinal:int,valueOf:?,values:TextStyle[]",
+      Thread: "|Object,Runnable|activeCount:int,checkAccess:void,currentThread:Thread,dumpStack:void,enumerate:int,getAllStackTraces:Map,getContextClassLoader:ClassLoader,getDefaultUncaughtExceptionHandler:UncaughtExceptionHandler,getId:long,getName:String,getPriority:int,getStackTrace:StackTraceElement[],getState:State,getThreadGroup:ThreadGroup,getUncaughtExceptionHandler:UncaughtExceptionHandler,holdsLock:boolean,interrupt:void,interrupted:boolean,isAlive:boolean,isDaemon:boolean,isInterrupted:boolean,isVirtual:boolean,join:?,ofPlatform:OfPlatform,ofVirtual:OfVirtual,onSpinWait:void,run:void,setContextClassLoader:void,setDaemon:void,setDefaultUncaughtExceptionHandler:void,setName:void,setPriority:void,setUncaughtExceptionHandler:void,sleep:void,start:void,startVirtualThread:Thread,stop:void,threadId:long,yield:void",
+      "Thread.Builder": "i|Object|factory:ThreadFactory,inheritInheritableThreadLocals:Builder,name:Builder,start:Thread,uncaughtExceptionHandler:Builder,unstarted:Thread",
+      "Thread.Builder.OfPlatform": "i|Builder,Object|daemon:OfPlatform,factory:ThreadFactory,group:OfPlatform,inheritInheritableThreadLocals:OfPlatform,name:OfPlatform,priority:OfPlatform,stackSize:OfPlatform,start:Thread,uncaughtExceptionHandler:OfPlatform,unstarted:Thread",
+      "Thread.Builder.OfVirtual": "i|Builder,Object|factory:ThreadFactory,inheritInheritableThreadLocals:OfVirtual,name:OfVirtual,start:Thread,uncaughtExceptionHandler:OfVirtual,unstarted:Thread",
+      "Thread.State": "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:State[]",
+      "Thread.UncaughtExceptionHandler": "i|Object|uncaughtException:void",
+      ThreadDeath: "|Error,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ThreadFactory: "i|Object|newThread:Thread",
+      ThreadGroup: "|Object,UncaughtExceptionHandler|activeCount:int,activeGroupCount:int,checkAccess:void,destroy:void,enumerate:int,getMaxPriority:int,getName:String,getParent:ThreadGroup,interrupt:void,isDaemon:boolean,isDestroyed:boolean,list:void,parentOf:boolean,setDaemon:void,setMaxPriority:void,uncaughtException:void",
+      ThreadLocal: "|Object|get:?,remove:void,set:void,withInitial:ThreadLocal",
+      ThreadLocalRandom: "f|Object,Random,RandomGenerator,Serializable|current:ThreadLocalRandom,doubles:DoubleStream,equiDoubles:DoubleStream,from:Random,ints:IntStream,isDeprecated:boolean,longs:LongStream,nextBoolean:boolean,nextBytes:void,nextDouble:double,nextExponential:double,nextFloat:float,nextGaussian:double,nextInt:int,nextLong:long,setSeed:void",
+      ThreadPoolExecutor: "|AbstractExecutorService,AutoCloseable,Executor,ExecutorService,Object|allowCoreThreadTimeOut:void,allowsCoreThreadTimeOut:boolean,awaitTermination:boolean,close:void,execute:void,getActiveCount:int,getCompletedTaskCount:long,getCorePoolSize:int,getKeepAliveTime:long,getLargestPoolSize:int,getMaximumPoolSize:int,getPoolSize:int,getQueue:BlockingQueue,getRejectedExecutionHandler:RejectedExecutionHandler,getTaskCount:long,getThreadFactory:ThreadFactory,invokeAll:List,invokeAny:?,isShutdown:boolean,isTerminated:boolean,isTerminating:boolean,prestartAllCoreThreads:int,prestartCoreThread:boolean,purge:void,remove:boolean,setCorePoolSize:void,setKeepAliveTime:void,setMaximumPoolSize:void,setRejectedExecutionHandler:void,setThreadFactory:void,shutdown:void,shutdownNow:List,submit:Future",
+      "ThreadPoolExecutor.AbortPolicy": "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      "ThreadPoolExecutor.CallerRunsPolicy": "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      "ThreadPoolExecutor.DiscardOldestPolicy": "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      "ThreadPoolExecutor.DiscardPolicy": "|Object,RejectedExecutionHandler|rejectedExecution:void",
+      Throwable: "|Object,Serializable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Time: "|Cloneable,Comparable,Date,Object,Serializable|UTC:long,after:boolean,before:boolean,clone:Object,compareTo:int,from:Date,getDate:int,getDay:int,getHours:int,getMinutes:int,getMonth:int,getSeconds:int,getTime:long,getTimezoneOffset:int,getYear:int,parse:long,setDate:void,setHours:void,setMinutes:void,setMonth:void,setSeconds:void,setTime:void,setYear:void,toGMTString:String,toInstant:Instant,toLocalTime:LocalTime,toLocaleString:String,valueOf:Time",
+      TimeUnit: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,convert:long,describeConstable:Optional,getDeclaringClass:Class,name:String,of:TimeUnit,ordinal:int,sleep:void,timedJoin:void,timedWait:void,toChronoUnit:ChronoUnit,toDays:long,toHours:long,toMicros:long,toMillis:long,toMinutes:long,toNanos:long,toSeconds:long,valueOf:?,values:TimeUnit[]",
+      TimeZone: "|Cloneable,Object,Serializable|availableIDs:Stream,clone:Object,getAvailableIDs:String[],getDSTSavings:int,getDefault:TimeZone,getDisplayName:String,getID:String,getOffset:int,getRawOffset:int,getTimeZone:TimeZone,hasSameRules:boolean,inDaylightTime:boolean,observesDaylightTime:boolean,setDefault:void,setID:void,setRawOffset:void,toZoneId:ZoneId,useDaylightTime:boolean",
+      TimeoutException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Timer: "|Object|cancel:void,purge:int,schedule:void,scheduleAtFixedRate:void",
+      TimerTask: "|Object,Runnable|cancel:boolean,run:void,scheduledExecutionTime:long",
+      Timestamp: "|Cloneable,Comparable,Date,Object,Serializable|UTC:long,after:boolean,before:boolean,clone:Object,compareTo:int,from:Timestamp,getDate:int,getDay:int,getHours:int,getMinutes:int,getMonth:int,getNanos:int,getSeconds:int,getTime:long,getTimezoneOffset:int,getYear:int,parse:long,setDate:void,setHours:void,setMinutes:void,setMonth:void,setNanos:void,setSeconds:void,setTime:void,setYear:void,toGMTString:String,toInstant:Instant,toLocalDateTime:LocalDateTime,toLocaleString:String,valueOf:Timestamp",
+      ToDoubleBiFunction: "i|Object|applyAsDouble:double",
+      ToDoubleFunction: "i|Object|applyAsDouble:double",
+      ToIntBiFunction: "i|Object|applyAsInt:int",
+      ToIntFunction: "i|Object|applyAsInt:int",
+      ToLongBiFunction: "i|Object|applyAsLong:long",
+      ToLongFunction: "i|Object|applyAsLong:long",
+      TooManyListenersException: "|Exception,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      TransferQueue: "i|BlockingQueue,Collection,Iterable,Object,Queue|add:boolean,addAll:boolean,clear:void,contains:boolean,containsAll:boolean,drainTo:int,element:?,forEach:void,getWaitingConsumerCount:int,hasWaitingConsumer:boolean,isEmpty:boolean,iterator:Iterator,offer:boolean,parallelStream:Stream,peek:?,poll:?,put:void,remainingCapacity:int,remove:?,removeAll:boolean,removeIf:boolean,retainAll:boolean,size:int,spliterator:Spliterator,stream:Stream,take:?,toArray:?,transfer:void,tryTransfer:boolean",
+      TreeMap: "|AbstractMap,Cloneable,Map,NavigableMap,Object,SequencedMap,Serializable,SortedMap|ceilingEntry:Entry,ceilingKey:?,clear:void,clone:Object,comparator:Comparator,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,descendingKeySet:NavigableSet,descendingMap:NavigableMap,entrySet:Set,firstEntry:Entry,firstKey:?,floorEntry:Entry,floorKey:?,forEach:void,get:?,getOrDefault:?,headMap:?,higherEntry:Entry,higherKey:?,isEmpty:boolean,keySet:Set,lastEntry:Entry,lastKey:?,lowerEntry:Entry,lowerKey:?,merge:?,navigableKeySet:NavigableSet,pollFirstEntry:Entry,pollLastEntry:Entry,put:?,putAll:void,putFirst:?,putIfAbsent:?,putLast:?,remove:?,replace:?,replaceAll:void,reversed:NavigableMap,sequencedEntrySet:SequencedSet,sequencedKeySet:SequencedSet,sequencedValues:SequencedCollection,size:int,subMap:?,tailMap:?,values:Collection",
+      TreeSet: "|AbstractCollection,AbstractSet,Cloneable,Collection,Iterable,NavigableSet,Object,SequencedCollection,SequencedSet,Serializable,Set,SortedSet|add:boolean,addAll:boolean,addFirst:void,addLast:void,ceiling:?,clear:void,clone:Object,comparator:Comparator,contains:boolean,containsAll:boolean,descendingIterator:Iterator,descendingSet:NavigableSet,first:?,floor:?,forEach:void,getFirst:?,getLast:?,headSet:?,higher:?,isEmpty:boolean,iterator:Iterator,last:?,lower:?,parallelStream:Stream,pollFirst:?,pollLast:?,remove:boolean,removeAll:boolean,removeFirst:?,removeIf:boolean,removeLast:?,retainAll:boolean,reversed:NavigableSet,size:int,spliterator:Spliterator,stream:Stream,subSet:?,tailSet:?,toArray:?",
+      Type: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,getDeclaringClass:Class,name:String,ordinal:int,valueOf:?,values:Type[]",
+      TypeNotPresentException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void,typeName:String",
+      Types: "|Object|",
+      UTFDataFormatException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UUID: "f|Comparable,Object,Serializable|clockSequence:int,compareTo:int,fromString:UUID,getLeastSignificantBits:long,getMostSignificantBits:long,nameUUIDFromBytes:UUID,node:long,randomUUID:UUID,timestamp:long,variant:int,version:int",
+      UnaryOperator: "i|Function,Object|andThen:Function,apply:?,compose:Function,identity:UnaryOperator",
+      UncaughtExceptionHandler: "i|Object|uncaughtException:void",
+      UncheckedIOException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:IOException,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnicodeBlock: "f|Object,Subset|forName:UnicodeBlock,of:UnicodeBlock",
+      UnicodeScript: "f|Comparable,Constable,Enum,Object,Serializable|compareTo:int,describeConstable:Optional,forName:UnicodeScript,getDeclaringClass:Class,name:String,of:UnicodeScript,ordinal:int,valueOf:?,values:UnicodeScript[]",
+      UnknownError: "|Error,Object,Serializable,Throwable,VirtualMachineError|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnknownFormatConversionException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getConversion:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnknownFormatFlagsException: "|Exception,IllegalArgumentException,IllegalFormatException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getFlags:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnmappableCharacterException: "|CharacterCodingException,Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getInputLength:int,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnsatisfiedLinkError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnsupportedCharsetException: "|Exception,IllegalArgumentException,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getCharsetName:String,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnsupportedClassVersionError: "|ClassFormatError,Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnsupportedEncodingException: "|Exception,IOException,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnsupportedOperationException: "|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      UnsupportedTemporalTypeException: "|DateTimeException,Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      ValueRange: "f|Object,Serializable|checkValidIntValue:int,checkValidValue:long,getLargestMinimum:long,getMaximum:long,getMinimum:long,getSmallestMaximum:long,isFixed:boolean,isIntValue:boolean,isValidIntValue:boolean,isValidValue:boolean,of:ValueRange",
+      Vector: "|AbstractCollection,AbstractList,Cloneable,Collection,Iterable,List,Object,RandomAccess,SequencedCollection,Serializable|add:?,addAll:boolean,addElement:void,addFirst:void,addLast:void,capacity:int,clear:void,clone:Object,contains:boolean,containsAll:boolean,copyInto:void,elementAt:?,elements:Enumeration,ensureCapacity:void,firstElement:?,forEach:void,get:?,getFirst:?,getLast:?,indexOf:int,insertElementAt:void,isEmpty:boolean,iterator:Iterator,lastElement:?,lastIndexOf:int,listIterator:ListIterator,parallelStream:Stream,remove:?,removeAll:boolean,removeAllElements:void,removeElement:boolean,removeElementAt:void,removeFirst:?,removeIf:boolean,removeLast:?,replaceAll:void,retainAll:boolean,reversed:List,set:?,setElementAt:void,setSize:void,size:int,sort:void,spliterator:Spliterator,stream:Stream,subList:List,toArray:?,trimToSize:void",
+      VerifyError: "|Error,LinkageError,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Version: "f|Comparable,Object|build:Optional,compareTo:int,compareToIgnoreOptional:int,equalsIgnoreOptional:boolean,feature:int,interim:int,major:int,minor:int,optional:Optional,parse:Version,patch:int,pre:Optional,security:int,update:int,version:List",
+      VirtualMachineError: "|Error,Object,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Void: "f|Object|",
+      WatchEvent: "i|Object|context:?,count:int,kind:Kind",
+      "WatchEvent.Kind": "i|Object|name:String,type:Class",
+      "WatchEvent.Modifier": "i|Object|name:String",
+      WatchKey: "i|Object|cancel:void,isValid:boolean,pollEvents:List,reset:boolean,watchable:Watchable",
+      WatchService: "i|AutoCloseable,Closeable,Object|close:void,poll:WatchKey,take:WatchKey",
+      Watchable: "i|Object|register:WatchKey",
+      WeakHashMap: "|AbstractMap,Map,Object|clear:void,compute:?,computeIfAbsent:?,computeIfPresent:?,containsKey:boolean,containsValue:boolean,entrySet:Set,forEach:void,get:?,getOrDefault:?,isEmpty:boolean,keySet:Set,merge:?,newWeakHashMap:WeakHashMap,put:?,putAll:void,putIfAbsent:?,remove:?,replace:?,replaceAll:void,size:int,values:Collection",
+      WeekFields: "f|Object,Serializable|dayOfWeek:TemporalField,getFirstDayOfWeek:DayOfWeek,getMinimalDaysInFirstWeek:int,of:WeekFields,weekBasedYear:TemporalField,weekOfMonth:TemporalField,weekOfWeekBasedYear:TemporalField,weekOfYear:TemporalField",
+      Wrapper: "i|Object|isWrapperFor:boolean,unwrap:?",
+      WriteAbortedException: "|Exception,IOException,Object,ObjectStreamException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      WriteLock: "|Lock,Object,Serializable|getHoldCount:int,isHeldByCurrentThread:boolean,lock:void,lockInterruptibly:void,newCondition:Condition,tryLock:boolean,unlock:void",
+      Writer: "|Appendable,AutoCloseable,Closeable,Flushable,Object|append:Writer,close:void,flush:void,nullWriter:Writer,write:void",
+      WrongThreadException: "f|Exception,Object,RuntimeException,Serializable,Throwable|addSuppressed:void,fillInStackTrace:Throwable,getCause:Throwable,getLocalizedMessage:String,getMessage:String,getStackTrace:StackTraceElement[],getSuppressed:Throwable[],initCause:Throwable,printStackTrace:void,setStackTrace:void",
+      Year: "f|Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atDay:LocalDate,atMonth:YearMonth,atMonthDay:LocalDate,compareTo:int,format:String,from:Year,get:int,getLong:long,getValue:int,isAfter:boolean,isBefore:boolean,isLeap:boolean,isSupported:boolean,isValidMonthDay:boolean,length:int,minus:Year,minusYears:Year,now:Year,of:Year,parse:Year,plus:Year,plusYears:Year,query:?,range:ValueRange,until:long,with:Year",
+      YearMonth: "f|Comparable,Object,Serializable,Temporal,TemporalAccessor,TemporalAdjuster|adjustInto:Temporal,atDay:LocalDate,atEndOfMonth:LocalDate,compareTo:int,format:String,from:YearMonth,get:int,getLong:long,getMonth:Month,getMonthValue:int,getYear:int,isAfter:boolean,isBefore:boolean,isLeapYear:boolean,isSupported:boolean,isValidDay:boolean,lengthOfMonth:int,lengthOfYear:int,minus:YearMonth,minusMonths:YearMonth,minusYears:YearMonth,now:YearMonth,of:YearMonth,parse:YearMonth,plus:YearMonth,plusMonths:YearMonth,plusYears:YearMonth,query:?,range:ValueRange,until:long,with:YearMonth,withMonth:YearMonth,withYear:YearMonth",
+      ZoneId: "|Object,Serializable|from:ZoneId,getAvailableZoneIds:Set,getDisplayName:String,getId:String,getRules:ZoneRules,normalized:ZoneId,of:ZoneId,ofOffset:ZoneId,systemDefault:ZoneId",
+      ZoneOffset: "f|Comparable,Object,Serializable,TemporalAccessor,TemporalAdjuster,ZoneId|adjustInto:Temporal,compareTo:int,from:ZoneOffset,get:int,getAvailableZoneIds:Set,getDisplayName:String,getId:String,getLong:long,getRules:ZoneRules,getTotalSeconds:int,isSupported:boolean,normalized:ZoneId,of:?,ofHours:ZoneOffset,ofHoursMinutes:ZoneOffset,ofHoursMinutesSeconds:ZoneOffset,ofOffset:ZoneId,ofTotalSeconds:ZoneOffset,query:?,range:ValueRange,systemDefault:ZoneId",
+      ZonedDateTime: "f|ChronoZonedDateTime,Comparable,Object,Serializable,Temporal,TemporalAccessor|compareTo:int,format:String,from:ZonedDateTime,get:int,getChronology:Chronology,getDayOfMonth:int,getDayOfWeek:DayOfWeek,getDayOfYear:int,getHour:int,getLong:long,getMinute:int,getMonth:Month,getMonthValue:int,getNano:int,getOffset:ZoneOffset,getSecond:int,getYear:int,getZone:ZoneId,isAfter:boolean,isBefore:boolean,isEqual:boolean,isSupported:boolean,minus:ZonedDateTime,minusDays:ZonedDateTime,minusHours:ZonedDateTime,minusMinutes:ZonedDateTime,minusMonths:ZonedDateTime,minusNanos:ZonedDateTime,minusSeconds:ZonedDateTime,minusWeeks:ZonedDateTime,minusYears:ZonedDateTime,now:ZonedDateTime,of:ZonedDateTime,ofInstant:ZonedDateTime,ofLocal:ZonedDateTime,ofStrict:ZonedDateTime,parse:ZonedDateTime,plus:ZonedDateTime,plusDays:ZonedDateTime,plusHours:ZonedDateTime,plusMinutes:ZonedDateTime,plusMonths:ZonedDateTime,plusNanos:ZonedDateTime,plusSeconds:ZonedDateTime,plusWeeks:ZonedDateTime,plusYears:ZonedDateTime,query:?,range:ValueRange,toEpochSecond:long,toInstant:Instant,toLocalDate:LocalDate,toLocalDateTime:LocalDateTime,toLocalTime:LocalTime,toOffsetDateTime:OffsetDateTime,truncatedTo:ZonedDateTime,until:long,with:ZonedDateTime,withDayOfMonth:ZonedDateTime,withDayOfYear:ZonedDateTime,withEarlierOffsetAtOverlap:ZonedDateTime,withFixedOffsetZone:ZonedDateTime,withHour:ZonedDateTime,withLaterOffsetAtOverlap:ZonedDateTime,withMinute:ZonedDateTime,withMonth:ZonedDateTime,withNano:ZonedDateTime,withSecond:ZonedDateTime,withYear:ZonedDateTime,withZoneSameInstant:ZonedDateTime,withZoneSameLocal:ZonedDateTime"
+    };
+  }
+});
+
+// packages/core/src/analysis/JdkTypes.ts
+function jdkType(written) {
+  const name = written.replace(/(\[\])+$/, "");
+  const cached = parsed.get(name);
+  if (cached !== void 0) return cached;
+  const type = parse(name);
+  parsed.set(name, type);
+  return type;
+}
+function parse(name) {
+  const segments = name.split(".");
+  const firstType = segments.findIndex((s) => /^[A-Z]/.test(s));
+  if (firstType < 0) return null;
+  if (firstType > 0 && segments[0] !== "java") return null;
+  const entry = JDK_TYPES[segments.slice(firstType).join(".")];
+  if (entry === void 0) return null;
+  const [flags = "", supertypes = "", methods = ""] = entry.split("|");
+  let returns;
+  return {
+    isFinal: flags.includes("f"),
+    isInterface: flags.includes("i"),
+    supertypes: new Set(supertypes ? supertypes.split(",") : []),
+    returnTypeOf(method) {
+      if (!returns) {
+        returns = /* @__PURE__ */ new Map();
+        for (const pair of methods ? methods.split(",") : []) {
+          const colon = pair.indexOf(":");
+          returns.set(pair.slice(0, colon), pair.slice(colon + 1));
+        }
+      }
+      return returns.get(method) ?? (method === "toString" ? "String" : method === "hashCode" ? "int" : method === "equals" ? "boolean" : void 0);
+    }
+  };
+}
+var parsed;
+var init_JdkTypes = __esm({
+  "packages/core/src/analysis/JdkTypes.ts"() {
+    "use strict";
+    init_jdkModel();
+    parsed = /* @__PURE__ */ new Map();
+  }
+});
+
+// packages/core/src/analysis/TypedCallResolver.ts
+function memo(cache, type, site, compute) {
+  let byKey = cache.get(type);
+  if (!byKey) {
+    byKey = /* @__PURE__ */ new Map();
+    cache.set(type, byKey);
+  }
+  const key = `${site.name}/${site.args}`;
+  let result = byKey.get(key);
+  if (!result) {
+    result = compute();
+    byKey.set(key, result);
+  }
+  return result;
+}
+function simpleName(type) {
+  return type.slice(type.lastIndexOf(".") + 1);
+}
+function dimensions(type) {
+  let dims = 0;
+  for (let end = type.length; type.endsWith("[]", end); end -= 2) dims++;
+  return dims;
+}
+function isSubtype(type, of) {
+  const seen = /* @__PURE__ */ new Set();
+  const stack = [type];
+  while (stack.length > 0) {
+    const t2 = stack.pop();
+    if (t2 === of) return true;
+    if (seen.has(t2)) continue;
+    seen.add(t2);
+    stack.push(...t2.supertypes);
+  }
+  return false;
+}
+function hasSupertypeNamed(type, name) {
+  const seen = /* @__PURE__ */ new Set();
+  const stack = [type];
+  while (stack.length > 0) {
+    const t2 = stack.pop();
+    if (seen.has(t2)) continue;
+    seen.add(t2);
+    if (t2.supertypeNames.some((s) => simpleName(s) === name)) return true;
+    stack.push(...t2.supertypes);
+  }
+  return false;
+}
+function fits(fn2, args) {
+  if (args < 0) return true;
+  const params = fn2.parameters.length;
+  return fn2.isVariadic ? args >= params - 1 : args === params;
+}
+var PRIMITIVES2, SELF_TYPE, VERDICT_SCORE, WIDENING, BOXES, UNBOXED, TypedCallResolver;
+var init_TypedCallResolver = __esm({
+  "packages/core/src/analysis/TypedCallResolver.ts"() {
+    "use strict";
+    init_JdkTypes();
+    PRIMITIVES2 = /* @__PURE__ */ new Set(["boolean", "byte", "char", "short", "int", "long", "float", "double", "void"]);
+    SELF_TYPE = "<self>";
+    VERDICT_SCORE = { exact: 3, yes: 1, maybe: 0, no: -1 };
+    WIDENING = {
+      byte: ["short", "int", "long", "float", "double"],
+      short: ["int", "long", "float", "double"],
+      char: ["int", "long", "float", "double"],
+      int: ["long", "float", "double"],
+      long: ["float", "double"],
+      float: ["double"]
+    };
+    BOXES = {
+      boolean: "Boolean",
+      byte: "Byte",
+      char: "Character",
+      short: "Short",
+      int: "Integer",
+      long: "Long",
+      float: "Float",
+      double: "Double"
+    };
+    UNBOXED = Object.fromEntries(Object.entries(BOXES).map(([p2, b3]) => [b3, p2]));
+    TypedCallResolver = class {
+      byQualifiedName = /* @__PURE__ */ new Map();
+      byFile = /* @__PURE__ */ new Map();
+      typeOfFunction = /* @__PURE__ */ new Map();
+      fileOfFunction = /* @__PURE__ */ new Map();
+      /** file -> context -> name as written -> type: resolution repeats for every call site, and building a string key cost more than the lookup. */
+      resolvedNames = /* @__PURE__ */ new Map();
+      /** Method name -> the types that declare a method of that name. */
+      declaringTypes = /* @__PURE__ */ new Map();
+      // Memoized per type, by `name/args`: the same lookups repeat across every call site.
+      above = /* @__PURE__ */ new Map();
+      below = /* @__PURE__ */ new Map();
+      sole = /* @__PURE__ */ new Map();
+      constructor(fileAnalyses) {
+        for (const file of fileAnalyses) {
+          const hasTypedCalls = file.functions.some((fn2) => fn2.callSites !== void 0);
+          if (!hasTypedCalls && file.packageName === void 0) continue;
+          const types = /* @__PURE__ */ new Map();
+          this.byFile.set(file, types);
+          for (const cls of [...file.classes, ...file.anonymousClasses ?? []]) {
+            if (!cls.path) continue;
+            const info = {
+              file,
+              path: cls.path,
+              qualifiedName: file.packageName ? `${file.packageName}.${cls.path}` : cls.path,
+              supertypeNames: [...cls.extends ? [cls.extends] : [], ...cls.implements ?? []],
+              supertypes: [],
+              subtypes: [],
+              methods: /* @__PURE__ */ new Map(),
+              constructors: [],
+              fields: new Map(Object.entries(cls.fields ?? {})),
+              isInterface: cls.kind === "interface" || cls.kind === "annotation"
+            };
+            types.set(cls.path, info);
+            if (!cls.path.includes("$")) this.byQualifiedName.set(info.qualifiedName, info);
+          }
+          for (const fn2 of file.functions) {
+            this.fileOfFunction.set(fn2, file);
+            const type = fn2.className === void 0 ? void 0 : types.get(fn2.className);
+            if (!type) continue;
+            this.typeOfFunction.set(fn2, type);
+            if (fn2.isConstructor) type.constructors.push(fn2);
+            else {
+              const list = type.methods.get(fn2.name);
+              if (list) list.push(fn2);
+              else {
+                type.methods.set(fn2.name, [fn2]);
+                const declaring = this.declaringTypes.get(fn2.name);
+                if (declaring) declaring.push(type);
+                else this.declaringTypes.set(fn2.name, [type]);
+              }
+            }
+          }
+        }
+        for (const types of this.byFile.values()) {
+          for (const type of types.values()) {
+            const context = type.path.includes(".") ? type.path.slice(0, type.path.lastIndexOf(".")) : void 0;
+            for (const name of type.supertypeNames) {
+              const supertype = this.resolveType(name, type.file, context);
+              if (supertype && supertype !== type && !type.supertypes.includes(supertype)) {
+                type.supertypes.push(supertype);
+                supertype.subtypes.push(type);
+              }
+            }
+          }
+        }
+        this.resolvedNames.clear();
+      }
+      /**
+       * For a call whose receiver's type is not known: the methods of that name
+       * and arity when a single type declares them, and nothing otherwise.
+       *
+       * Measured against javac on seven repositories, linking no such call at all
+       * missed 0.2 to 0.6 points of recall; linking every same-named method cost
+       * up to 8 points of precision. One declaring type is the one case where the
+       * name alone points somewhere, and a missed caller is the error a reader
+       * of an impact report cannot see.
+       */
+      soleDeclarations(site) {
+        if (site.kind === "new") return [];
+        const key = `${site.name}/${site.args}`;
+        let result = this.sole.get(key);
+        if (!result) {
+          result = [];
+          let declaringTypes = 0;
+          for (const type of this.declaringTypes.get(site.name) ?? []) {
+            const fns = (type.methods.get(site.name) ?? []).filter((fn2) => fits(fn2, site.args));
+            if (fns.length === 0) continue;
+            if (++declaringTypes > 1) {
+              result = [];
+              break;
+            }
+            result.push(...fns);
+          }
+          this.sole.set(key, result);
+        }
+        return result;
+      }
+      /** Whether calls from this function are resolved here rather than by name. */
+      handles(fn2) {
+        return fn2.callSites !== void 0 && this.fileOfFunction.has(fn2);
+      }
+      /**
+       * The functions `site` can reach, or null when its receiver's type is not
+       * known, so that only the name can say. An empty list means the call goes
+       * outside the repository: a library method, or a constructor never written.
+       */
+      resolve(caller, site) {
+        const file = this.fileOfFunction.get(caller);
+        if (!file) return null;
+        const lookup = this.lookUp(site, file, caller.className);
+        return lookup && lookup.targets.filter((fn2) => fn2 !== caller);
+      }
+      /**
+       * The call's targets, the declarations among them that Java chooses at
+       * compile time (the rest are overrides dispatch can reach), and the types
+       * they were looked up in - repository types, and standard library types
+       * by name; null when the receiver's type is not known.
+       */
+      lookUp(site, file, context) {
+        const found = /* @__PURE__ */ new Set();
+        const declared = /* @__PURE__ */ new Set();
+        let receiverTypes = [];
+        let libraryTypes = [];
+        const nothing = { targets: [], declared: [], receiverTypes: [], libraryTypes: [] };
+        if (site.receiverCall) {
+          const result = this.resultTypes(site.receiverCall, file, context);
+          if (result === null) return null;
+          receiverTypes = result.repo;
+          libraryTypes = result.library;
+          for (const type of receiverTypes) {
+            for (const fn2 of this.declaredAbove(type, site)) declared.add(fn2);
+            for (const fn2 of this.overridesBelow(type, site)) found.add(fn2);
+          }
+        } else if (site.kind === "unknown" || !site.receivers || site.receivers.length === 0) {
+          if (site.field === void 0) {
+            if (site.via !== void 0 && !this.resolveType(site.via, file, context)) return nothing;
+            return null;
+          }
+          const fieldType = this.fieldTypeOf(site.field, site.via, file, context);
+          if (fieldType === void 0) return null;
+          if (fieldType === null) return nothing;
+          receiverTypes = [fieldType];
+          for (const fn2 of this.declaredAbove(fieldType, site)) declared.add(fn2);
+          for (const fn2 of this.overridesBelow(fieldType, site)) found.add(fn2);
+        } else if (site.kind === "new") {
+          const type = this.resolveType(site.receivers[0], file, context);
+          if (type) receiverTypes = [type];
+          for (const ctor of type?.constructors ?? []) if (fits(ctor, site.args)) declared.add(ctor);
+        } else if (site.kind === "super") {
+          const type = this.resolveType(site.receivers[0], file, context);
+          receiverTypes = type?.supertypes ?? [];
+          for (const supertype of receiverTypes) for (const fn2 of this.declaredAbove(supertype, site)) declared.add(fn2);
+        } else {
+          for (const receiver of site.kind === "static" ? site.receivers.slice(0, 1) : site.receivers) {
+            const type = this.resolveType(receiver, file, context);
+            if (!type) {
+              if (jdkType(receiver)?.returnTypeOf(site.name) !== void 0) {
+                libraryTypes = [receiver];
+                break;
+              }
+              continue;
+            }
+            const above = this.declaredAbove(type, site);
+            const below = site.kind === "static" ? [] : this.overridesBelow(type, site);
+            if (above.length === 0 && below.length === 0) continue;
+            receiverTypes = [type];
+            for (const fn2 of above) declared.add(fn2);
+            for (const fn2 of below) found.add(fn2);
+            break;
+          }
+        }
+        for (const fn2 of declared) found.add(fn2);
+        const targets = this.narrowByArguments([...found], site, file, context);
+        return { targets, declared: targets.filter((fn2) => declared.has(fn2)), receiverTypes, libraryTypes };
+      }
+      /**
+       * The type of field `name`, read from type `via`, or inherited by the
+       * caller's classes when `via` is not given: null when it is a library type
+       * (or a field of one), undefined when no field of that name is found.
+       */
+      fieldTypeOf(name, via, file, context) {
+        let owners;
+        if (via !== void 0) {
+          const owner = this.resolveType(via, file, context);
+          if (!owner) return null;
+          owners = [owner];
+        } else {
+          const types = this.byFile.get(file);
+          const parts = context?.split(".") ?? [];
+          owners = [];
+          for (let i = parts.length; i > 0; i--) {
+            const enclosing = types?.get(parts.slice(0, i).join("."));
+            if (enclosing) owners.push(enclosing);
+          }
+        }
+        for (const owner of owners) {
+          const field = this.fieldOf(owner, name, /* @__PURE__ */ new Set());
+          if (field) return this.resolveType(field.type, field.owner.file, field.owner.path);
+        }
+        return void 0;
+      }
+      fieldOf(type, name, seen) {
+        if (seen.has(type)) return null;
+        seen.add(type);
+        const own = type.fields.get(name);
+        if (own) return { type: own, owner: type };
+        for (const supertype of type.supertypes) {
+          const inherited = this.fieldOf(supertype, name, seen);
+          if (inherited) return inherited;
+        }
+        return null;
+      }
+      /** The declared return type of the method a call resolves to, as an argument type. */
+      returnTypeOf(call, file, context) {
+        if (!call) return null;
+        const lookup = this.lookUp(call, file, context);
+        if (!lookup) return null;
+        const first = lookup.declared[0];
+        if (!first) {
+          const [library, ...more] = lookup.libraryTypes;
+          const returned2 = library && more.length === 0 ? jdkType(library)?.returnTypeOf(call.name) : void 0;
+          return returned2 && returned2 !== "?" ? { type: returned2, file, context } : null;
+        }
+        const returned = first.returnType;
+        if (returned === void 0 || returned === null) return null;
+        if (returned === SELF_TYPE) {
+          const [type, ...more] = lookup.receiverTypes;
+          return type && more.length === 0 ? { type: type.path, file: type.file, context: void 0 } : null;
+        }
+        if (lookup.declared.some((fn2) => fn2.returnType !== returned)) return null;
+        const calleeFile = this.fileOfFunction.get(first);
+        return calleeFile ? { type: returned, file: calleeFile, context: first.className } : null;
+      }
+      /**
+       * The types a call's result can have: repository types, and standard
+       * library types by name. Both are empty when it returns a primitive or
+       * nothing; null when the type is not known - a type variable, or a method
+       * of a library outside the JDK model.
+       */
+      resultTypes(site, file, context) {
+        const lookup = this.lookUp(site, file, context);
+        if (!lookup) return null;
+        const repo = /* @__PURE__ */ new Set();
+        const library = /* @__PURE__ */ new Set();
+        if (lookup.declared.length === 0) {
+          if (lookup.libraryTypes.length === 0) return null;
+          for (const name of lookup.libraryTypes) {
+            const returned = jdkType(name)?.returnTypeOf(site.name);
+            if (returned === void 0 || returned === "?") return null;
+            if (!PRIMITIVES2.has(returned) && !returned.endsWith("[]")) library.add(returned);
+          }
+          return { repo: [], library: [...library] };
+        }
+        for (const fn2 of lookup.declared) {
+          const returned = fn2.returnType;
+          if (returned === void 0 || returned === null) return null;
+          if (returned === SELF_TYPE) {
+            for (const type2 of lookup.receiverTypes) repo.add(type2);
+            continue;
+          }
+          const calleeFile = this.fileOfFunction.get(fn2);
+          const type = calleeFile && this.resolveType(returned, calleeFile, fn2.className);
+          if (type) repo.add(type);
+          else if (jdkType(returned)) library.add(returned);
+        }
+        return { repo: [...repo], library: [...library] };
+      }
+      /**
+       * Of several methods a call could reach by name and argument count, the
+       * ones its argument types fit, most specific first - Java's overload
+       * resolution, as far as the argument types are known. `join(int[], char)`
+       * and `join(Object[], String)` take two arguments each; the types tell
+       * them apart. Where no candidate fits, all are kept: the inferred types
+       * may be what is wrong.
+       */
+      narrowByArguments(candidates, site, file, context) {
+        if (candidates.length < 2 || !site.argTypes) return candidates;
+        const argTypes = site.argTypes.map(
+          (type, i) => type !== null ? { type, file, context } : this.returnTypeOf(site.argCalls?.[i], file, context)
+        );
+        if (argTypes.every((t2) => t2 === null)) return candidates;
+        const scored = [];
+        for (const fn2 of candidates) {
+          const calleeFile = this.fileOfFunction.get(fn2);
+          if (!calleeFile || !fn2.parameterTypes) {
+            scored.push({ fn: fn2, score: 0 });
+            continue;
+          }
+          let score = 0;
+          let fitsAll = true;
+          for (let i = 0; i < argTypes.length && fitsAll; i++) {
+            let best = -1;
+            for (const param of this.parameterTypesAt(fn2, i, argTypes.length)) {
+              const verdict = this.assignable(argTypes[i] ?? null, param, calleeFile, fn2.className);
+              best = Math.max(best, VERDICT_SCORE[verdict]);
+            }
+            if (best < 0) fitsAll = false;
+            else score += best;
+          }
+          if (fitsAll) scored.push({ fn: fn2, score });
+        }
+        if (scored.length === 0) return candidates;
+        const top = Math.max(...scored.map((s) => s.score));
+        return scored.filter((s) => s.score === top).map((s) => s.fn);
+      }
+      /** The declared type(s) argument `i` is matched against; a variadic slot takes the array or its element. */
+      parameterTypesAt(fn2, i, args) {
+        const types = fn2.parameterTypes ?? [];
+        const last = types.length - 1;
+        if (!fn2.isVariadic || i < last) return [types[i] ?? null];
+        const array = types[last] ?? null;
+        const element = array?.endsWith("[]") ? array.slice(0, -2) : null;
+        return args === types.length && i === last ? [array, element] : [element];
+      }
+      /** Whether an argument of type `arg` can be passed for a parameter of type `param` (JLS 5.3). */
+      assignable(argument, param, paramFile, paramContext) {
+        if (argument === null || param === null) return "maybe";
+        const { type: arg, file: argFile, context: argContext } = argument;
+        if (arg === "null") return PRIMITIVES2.has(param) ? "no" : "yes";
+        const p2 = simpleName(param);
+        if (arg === "->") {
+          if (PRIMITIVES2.has(param) || param.endsWith("[]")) return "no";
+          const declaredType = this.resolveType(param, paramFile, paramContext);
+          const isInterface = declaredType ? declaredType.isInterface : jdkType(param)?.isInterface;
+          return isInterface === false ? "no" : "maybe";
+        }
+        const argPrimitive = PRIMITIVES2.has(arg);
+        const paramPrimitive = PRIMITIVES2.has(param);
+        if (argPrimitive && paramPrimitive) return arg === param ? "exact" : WIDENING[arg]?.includes(param) ? "yes" : "no";
+        if (argPrimitive) {
+          const box = BOXES[arg] ?? "";
+          if (p2 === box || jdkType(box)?.supertypes.has(p2)) return "yes";
+          if (param.endsWith("[]") || jdkType(param) || this.resolveType(param, paramFile, paramContext)) return "no";
+          return "maybe";
+        }
+        if (paramPrimitive) {
+          const unboxed = UNBOXED[simpleName(arg)];
+          if (!unboxed) return "no";
+          return unboxed === param || WIDENING[unboxed]?.includes(param) ? "yes" : "no";
+        }
+        const argDims = dimensions(arg);
+        const paramDims = dimensions(param);
+        if (paramDims > 0) {
+          if (argDims === 0) return "no";
+          if (argDims !== paramDims) return "maybe";
+          const a2 = arg.slice(0, arg.length - 2 * argDims);
+          const q3 = param.slice(0, param.length - 2 * paramDims);
+          if (PRIMITIVES2.has(a2) || PRIMITIVES2.has(q3)) return a2 === q3 ? "exact" : "no";
+          return this.assignable({ type: a2, file: argFile, context: argContext }, q3, paramFile, paramContext);
+        }
+        if (argDims > 0) return p2 === "Object" || p2 === "Cloneable" || p2 === "Serializable" ? "yes" : "no";
+        const argType = this.resolveType(arg, argFile, argContext);
+        const paramType = this.resolveType(param, paramFile, paramContext);
+        if (argType && paramType) return argType === paramType ? "exact" : isSubtype(argType, paramType) ? "yes" : "no";
+        if (paramType) return "no";
+        if (p2 === "Object") return "yes";
+        if (argType) {
+          if (hasSupertypeNamed(argType, p2)) return "yes";
+          let unknownSupertype = false;
+          for (const name of this.librarySupertypes(argType)) {
+            const library2 = jdkType(name);
+            if (!library2) unknownSupertype = true;
+            else if (library2.supertypes.has(p2)) return "yes";
+          }
+          return unknownSupertype ? "maybe" : "no";
+        }
+        const a = simpleName(arg);
+        if (a === p2) return "exact";
+        const library = jdkType(arg);
+        if (library) return library.supertypes.has(p2) ? "yes" : "no";
+        return jdkType(param)?.isFinal ? "no" : "maybe";
+      }
+      /** The supertypes named in `type`'s hierarchy that are not declared in the repository. */
+      librarySupertypes(type) {
+        const names = [];
+        const seen = /* @__PURE__ */ new Set();
+        const stack = [type];
+        while (stack.length > 0) {
+          const t2 = stack.pop();
+          if (seen.has(t2)) continue;
+          seen.add(t2);
+          const context = t2.path.includes(".") ? t2.path.slice(0, t2.path.lastIndexOf(".")) : void 0;
+          for (const name of t2.supertypeNames) if (!this.resolveType(name, t2.file, context)) names.push(name);
+          stack.push(...t2.supertypes);
+        }
+        return names;
+      }
+      /** The nearest declarations of the site's method in `type` or its supertypes. */
+      declaredAbove(type, site) {
+        return memo(this.above, type, site, () => this.findAbove(type, site));
+      }
+      findAbove(type, site) {
+        const result = [];
+        const seen = /* @__PURE__ */ new Set();
+        const visit = (t2) => {
+          if (seen.has(t2)) return;
+          seen.add(t2);
+          const own = (t2.methods.get(site.name) ?? []).filter((fn2) => fits(fn2, site.args));
+          if (own.length > 0) {
+            result.push(...own);
+            return;
+          }
+          for (const s of t2.supertypes) visit(s);
+        };
+        visit(type);
+        return result;
+      }
+      /** Overrides of the site's method in the subtypes of `type`, which dispatch can reach. */
+      overridesBelow(type, site) {
+        if (type.subtypes.length === 0) return [];
+        return memo(this.below, type, site, () => this.findBelow(type, site));
+      }
+      findBelow(type, site) {
+        const result = [];
+        const seen = /* @__PURE__ */ new Set([type]);
+        const stack = [...type.subtypes];
+        while (stack.length > 0) {
+          const t2 = stack.pop();
+          if (seen.has(t2)) continue;
+          seen.add(t2);
+          for (const fn2 of t2.methods.get(site.name) ?? []) if (fits(fn2, site.args)) result.push(fn2);
+          stack.push(...t2.subtypes);
+        }
+        return result;
+      }
+      /**
+       * The repository type a name written in `file` refers to, from within the
+       * type at `context`; null when the repository does not declare it.
+       */
+      resolveType(written, file, context) {
+        let byContext = this.resolvedNames.get(file);
+        if (!byContext) {
+          byContext = /* @__PURE__ */ new Map();
+          this.resolvedNames.set(file, byContext);
+        }
+        let byName = byContext.get(context ?? "");
+        if (!byName) {
+          byName = /* @__PURE__ */ new Map();
+          byContext.set(context ?? "", byName);
+        }
+        const cached = byName.get(written);
+        if (cached !== void 0) return cached;
+        const resolved = this.lookUpType(written, file, context);
+        byName.set(written, resolved);
+        return resolved;
+      }
+      lookUpType(written, file, context) {
+        if (written.endsWith("[]") || PRIMITIVES2.has(written)) return null;
+        const types = this.byFile.get(file);
+        if (!types) return null;
+        const exact = types.get(written);
+        if (exact) return exact;
+        const [head, ...rest] = written.split(".");
+        if (!head) return null;
+        let type = this.lookUpSimpleName(head, file, types, context);
+        if (!type) {
+          const segments = written.split(".");
+          for (let i = segments.length; i > 0 && !type; i--) {
+            const candidate = this.byQualifiedName.get(segments.slice(0, i).join("."));
+            if (candidate) {
+              type = candidate;
+              rest.splice(0, rest.length, ...segments.slice(i));
+            }
+          }
+          if (!type) return null;
+        }
+        for (const segment of rest) {
+          const member = this.memberType(type, segment, /* @__PURE__ */ new Set());
+          if (!member) return null;
+          type = member;
+        }
+        return type;
+      }
+      lookUpSimpleName(name, file, types, context) {
+        if (context) {
+          const parts = context.split(".");
+          for (let i = parts.length; i > 0; i--) {
+            const enclosing = types.get(parts.slice(0, i).join("."));
+            if (!enclosing) continue;
+            if (enclosing.path.endsWith(`.${name}`) || enclosing.path === name) return enclosing;
+            const member = this.memberType(enclosing, name, /* @__PURE__ */ new Set());
+            if (member) return member;
+          }
+        }
+        const topLevel = types.get(name);
+        if (topLevel) return topLevel;
+        for (const imp of file.imports) {
+          if (imp.source.endsWith(`.${name}`)) return this.byQualifiedName.get(imp.source) ?? null;
+        }
+        const samePackage = this.byQualifiedName.get(file.packageName ? `${file.packageName}.${name}` : name);
+        if (samePackage) return samePackage;
+        for (const imp of file.imports) {
+          if (!imp.source.endsWith(".*")) continue;
+          const onDemand = this.byQualifiedName.get(`${imp.source.slice(0, -1)}${name}`);
+          if (onDemand) return onDemand;
+        }
+        return null;
+      }
+      /** A type nested in `type`, or inherited by it from a supertype. */
+      memberType(type, name, seen) {
+        if (seen.has(type)) return null;
+        seen.add(type);
+        const own = this.byFile.get(type.file)?.get(`${type.path}.${name}`);
+        if (own) return own;
+        for (const supertype of type.supertypes) {
+          const inherited = this.memberType(supertype, name, seen);
+          if (inherited) return inherited;
+        }
+        return null;
+      }
+    };
+  }
+});
+
 // packages/core/src/analysis/CallGraphBuilder.ts
 function buildCallGraph(fileAnalyses, rootDir = "", deadCode = findDeadCode(fileAnalyses)) {
   const deadNames = new Set(deadCode.map((d2) => d2.function.name));
@@ -11069,16 +13563,27 @@ function buildCallGraph(fileAnalyses, rootDir = "", deadCode = findDeadCode(file
     }
   }
   const edgeSeen = /* @__PURE__ */ new Set();
+  const addEdge = (sourceId, targetId) => {
+    const edgeKey = `${sourceId}\u2192${targetId}`;
+    if (edgeSeen.has(edgeKey)) return;
+    edgeSeen.add(edgeKey);
+    edges.push({ id: edgeKey, source: sourceId, target: targetId });
+  };
+  const resolver = new TypedCallResolver(fileAnalyses);
   for (const file of fileAnalyses) {
     for (const fn2 of file.functions) {
       const sourceId = idOf(fn2);
+      if (resolver.handles(fn2)) {
+        for (const site of fn2.callSites ?? []) {
+          const targets = resolver.resolve(fn2, site) ?? resolver.soleDeclarations(site);
+          for (const target of targets) if (target !== fn2) addEdge(sourceId, idOf(target));
+        }
+        continue;
+      }
       for (const callee of fn2.calls) {
         const targetId = nodeIdMap.get(callee);
         if (!targetId) continue;
-        const edgeKey = `${sourceId}\u2192${targetId}`;
-        if (edgeSeen.has(edgeKey)) continue;
-        edgeSeen.add(edgeKey);
-        edges.push({ id: edgeKey, source: sourceId, target: targetId });
+        addEdge(sourceId, targetId);
       }
     }
   }
@@ -11089,6 +13594,7 @@ var init_CallGraphBuilder = __esm({
     "use strict";
     init_DeadCodeFinder();
     init_EntryPointDetector();
+    init_TypedCallResolver();
   }
 });
 
@@ -18430,7 +20936,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse(src, reviver, options) {
+    function parse2(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -18471,7 +20977,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse;
+    exports.parse = parse2;
     exports.parseAllDocuments = parseAllDocuments2;
     exports.parseDocument = parseDocument;
     exports.stringify = stringify;
@@ -20849,7 +23355,7 @@ var require_parse = __commonJS({
       CHAR_NO_BREAK_SPACE,
       CHAR_ZERO_WIDTH_NOBREAK_SPACE
     } = require_constants();
-    var parse = (input, options = {}) => {
+    var parse2 = (input, options = {}) => {
       if (typeof input !== "string") {
         throw new TypeError("Expected a string");
       }
@@ -21049,7 +23555,7 @@ var require_parse = __commonJS({
       push({ type: "eos" });
       return ast;
     };
-    module.exports = parse;
+    module.exports = parse2;
   }
 });
 
@@ -21060,7 +23566,7 @@ var require_braces = __commonJS({
     var stringify = require_stringify2();
     var compile = require_compile();
     var expand = require_expand();
-    var parse = require_parse();
+    var parse2 = require_parse();
     var braces = (input, options = {}) => {
       let output = [];
       if (Array.isArray(input)) {
@@ -21080,7 +23586,7 @@ var require_braces = __commonJS({
       }
       return output;
     };
-    braces.parse = (input, options = {}) => parse(input, options);
+    braces.parse = (input, options = {}) => parse2(input, options);
     braces.stringify = (input, options = {}) => {
       if (typeof input === "string") {
         return stringify(braces.parse(input, options), options);
@@ -21944,7 +24450,7 @@ var require_parse2 = __commonJS({
       }
       return { risky: false };
     };
-    var parse = (input, options) => {
+    var parse2 = (input, options) => {
       if (typeof input !== "string") {
         throw new TypeError("Expected a string");
       }
@@ -22115,7 +24621,7 @@ var require_parse2 = __commonJS({
             output = token.close = `)$))${extglobStar}`;
           }
           if (token.inner.includes("*") && (rest = remaining()) && /^\.[^\\/.]+$/.test(rest)) {
-            const expression = parse(rest, { ...options, fastpaths: false }).output;
+            const expression = parse2(rest, { ...options, fastpaths: false }).output;
             output = token.close = `)${expression})${extglobStar})`;
           }
           if (token.prev.type === "bos") {
@@ -22640,7 +25146,7 @@ var require_parse2 = __commonJS({
       }
       return state;
     };
-    parse.fastpaths = (input, options) => {
+    parse2.fastpaths = (input, options) => {
       const opts = { ...options };
       const max = typeof opts.maxLength === "number" ? Math.min(MAX_LENGTH, opts.maxLength) : MAX_LENGTH;
       const len = input.length;
@@ -22706,7 +25212,7 @@ var require_parse2 = __commonJS({
       }
       return source;
     };
-    module.exports = parse;
+    module.exports = parse2;
   }
 });
 
@@ -22716,7 +25222,7 @@ var require_picomatch = __commonJS({
     "use strict";
     var path59 = __require("path");
     var scan = require_scan();
-    var parse = require_parse2();
+    var parse2 = require_parse2();
     var utils = require_utils2();
     var constants = require_constants2();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
@@ -22804,7 +25310,7 @@ var require_picomatch = __commonJS({
     picomatch.isMatch = (str, patterns, options) => picomatch(patterns, options)(str);
     picomatch.parse = (pattern, options) => {
       if (Array.isArray(pattern)) return pattern.map((p2) => picomatch.parse(p2, options));
-      return parse(pattern, { ...options, fastpaths: false });
+      return parse2(pattern, { ...options, fastpaths: false });
     };
     picomatch.scan = (input, options) => scan(input, options);
     picomatch.compileRe = (state, options, returnOutput = false, returnState = false) => {
@@ -22828,14 +25334,14 @@ var require_picomatch = __commonJS({
       if (!input || typeof input !== "string") {
         throw new TypeError("Expected a non-empty string");
       }
-      let parsed = { negated: false, fastpaths: true };
+      let parsed2 = { negated: false, fastpaths: true };
       if (options.fastpaths !== false && (input[0] === "." || input[0] === "*")) {
-        parsed.output = parse.fastpaths(input, options);
+        parsed2.output = parse2.fastpaths(input, options);
       }
-      if (!parsed.output) {
-        parsed = parse(input, options);
+      if (!parsed2.output) {
+        parsed2 = parse2(input, options);
       }
-      return picomatch.compileRe(parsed, options, returnOutput, returnState);
+      return picomatch.compileRe(parsed2, options, returnOutput, returnState);
     };
     picomatch.toRegex = (source, options) => {
       try {
@@ -25848,7 +28354,7 @@ var require_ms = __commonJS({
       options = options || {};
       var type = typeof val;
       if (type === "string" && val.length > 0) {
-        return parse(val);
+        return parse2(val);
       } else if (type === "number" && isFinite(val)) {
         return options.long ? fmtLong(val) : fmtShort(val);
       }
@@ -25856,7 +28362,7 @@ var require_ms = __commonJS({
         "val is not a non-empty string or a valid number. val=" + JSON.stringify(val)
       );
     };
-    function parse(str) {
+    function parse2(str) {
       str = String(str);
       if (str.length > 100) {
         return;
@@ -30439,9 +32945,9 @@ async function extractPythonDependencies(rootDir) {
       continue;
     }
     for (const line of content.split("\n")) {
-      const parsed = parseRequirementsTxtLine(line);
-      if (!parsed) continue;
-      results.push({ name: parsed.name, version: parsed.version, ecosystem: "PyPI", manifestPath });
+      const parsed2 = parseRequirementsTxtLine(line);
+      if (!parsed2) continue;
+      results.push({ name: parsed2.name, version: parsed2.version, ecosystem: "PyPI", manifestPath });
     }
   }
   return results;
@@ -31007,6 +33513,7 @@ function reviewChanges(analysis, changes, options = {}) {
   };
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const callersByName = /* @__PURE__ */ new Map();
+  const callersById = /* @__PURE__ */ new Map();
   for (const edge of edges) {
     const target = nodeById.get(edge.target);
     const caller = nodeById.get(edge.source);
@@ -31014,6 +33521,9 @@ function reviewChanges(analysis, changes, options = {}) {
     const list = callersByName.get(target.name);
     if (list) list.push(caller);
     else callersByName.set(target.name, [caller]);
+    const byId = callersById.get(target.id);
+    if (byId) byId.push(caller);
+    else callersById.set(target.id, [caller]);
   }
   const declarationsByName = /* @__PURE__ */ new Map();
   const filesByName = /* @__PURE__ */ new Map();
@@ -31046,7 +33556,7 @@ function reviewChanges(analysis, changes, options = {}) {
   const callersOf = (callee) => {
     let list = visibleCallers.get(callee);
     if (!list) {
-      list = (callersByName.get(callee.name) ?? []).filter((c3) => c3 !== callee && canSee(c3, callee));
+      list = TYPED_CALL_LANGUAGES.has(callee.language) ? (callersById.get(callee.id) ?? []).filter((c3) => c3 !== callee) : (callersByName.get(callee.name) ?? []).filter((c3) => c3 !== callee && canSee(c3, callee));
       visibleCallers.set(callee, list);
     }
     return list;
@@ -31127,15 +33637,15 @@ function touches(change, start, end) {
 function matchBaseFunctions(fileNodes, change) {
   const matched = /* @__PURE__ */ new Map();
   if (change.baseContent === null || change.baseFilePath === null) return matched;
-  const parsed = parseFile(change.baseContent, change.baseFilePath);
-  if (!parsed) return matched;
+  const parsed2 = parseFile(change.baseContent, change.baseFilePath);
+  if (!parsed2) return matched;
   const currentParams = /* @__PURE__ */ new Map();
   if (change.content !== void 0) {
     for (const fn2 of parseFile(change.content, change.filePath)?.functions ?? []) {
       currentParams.set(`${fn2.name}:${fn2.startLine}`, fn2.parameters.join(","));
     }
   }
-  const baseByName = groupByName(parsed.functions);
+  const baseByName = groupByName(parsed2.functions);
   const currentByName = groupByName(fileNodes);
   for (const [name, current] of currentByName) {
     const base = baseByName.get(name) ?? [];
@@ -31234,7 +33744,7 @@ function pathKey(filePath) {
   const resolved = path48.resolve(filePath);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
-var REACH_DEPTH, REACH_LIMIT, CALLER_LIST_LIMIT, STANDARD_METHOD_NAMES;
+var REACH_DEPTH, REACH_LIMIT, CALLER_LIST_LIMIT, STANDARD_METHOD_NAMES, TYPED_CALL_LANGUAGES;
 var init_ChangeReview = __esm({
   "packages/core/src/analysis/ChangeReview.ts"() {
     "use strict";
@@ -31373,6 +33883,7 @@ var init_ChangeReview = __esm({
       "iterator",
       "compareTo"
     ]);
+    TYPED_CALL_LANGUAGES = /* @__PURE__ */ new Set(["java"]);
   }
 });
 
@@ -33039,7 +35550,7 @@ var REVIEW_COMMENT_MARKER = "<!-- archsetu-review -->";
 var MAX_TABLE_ROWS = 10;
 var MAX_LISTED_FINDINGS = 10;
 var MAX_LISTED_CALLERS2 = 8;
-var VERIFIED_CALLER_LANGUAGES = /* @__PURE__ */ new Set(["javascript", "typescript", "vue", "svelte", "python", "go"]);
+var VERIFIED_CALLER_LANGUAGES = /* @__PURE__ */ new Set(["javascript", "typescript", "vue", "svelte", "python", "go", "java"]);
 var LANGUAGE_NAMES = {
   java: "Java",
   rust: "Rust",
@@ -33245,9 +35756,9 @@ function scanChangedFiles(gitRoot, files) {
     const content = file.content ?? readOrUndefined(file.filePath);
     if (content === void 0) continue;
     const relative = `/${path49.relative(gitRoot, file.filePath).split(path49.sep).join("/")}`;
-    const parsed = parseFile(content, relative);
-    if (!parsed) continue;
-    analyses.push(parsed);
+    const parsed2 = parseFile(content, relative);
+    if (!parsed2) continue;
+    analyses.push(parsed2);
     contents.set(relative, content);
   }
   return analyzeSecurityRisk(analyses, contents).findings.map((f3) => ({
@@ -34250,8 +36761,8 @@ var TOOLS = [
           }
         };
       }
-      const parsed = parseFile(content, absolute);
-      if (parsed === null) {
+      const parsed2 = parseFile(content, absolute);
+      if (parsed2 === null) {
         return {
           isError: true,
           payload: {
@@ -34261,7 +36772,7 @@ var TOOLS = [
           }
         };
       }
-      const explanation = explainFile(parsed);
+      const explanation = explainFile(parsed2);
       const functions = slice(explanation.functions, limitOf(args));
       return {
         payload: {
@@ -34646,7 +37157,7 @@ var TOOLS = [
 var TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
 
 // packages/cli/src/version.ts
-var CLI_VERSION = "0.1.23";
+var CLI_VERSION = "0.1.24";
 
 // packages/cli/src/mcp/server.ts
 var MODERN_VERSION = "2026-07-28";
@@ -35504,9 +38015,9 @@ function declaredDependencyNames(rootDir) {
   const pkg = readTextFile(path54.join(rootDir, "package.json"));
   if (pkg) {
     try {
-      const parsed = JSON.parse(pkg);
+      const parsed2 = JSON.parse(pkg);
       for (const field of ["dependencies", "devDependencies", "peerDependencies"]) {
-        const deps = parsed[field];
+        const deps = parsed2[field];
         if (typeof deps === "object" && deps !== null) Object.keys(deps).forEach(add);
       }
     } catch {
@@ -35537,8 +38048,8 @@ function declaredDependencyNames(rootDir) {
   const composer = readTextFile(path54.join(rootDir, "composer.json"));
   if (composer) {
     try {
-      const parsed = JSON.parse(composer);
-      const deps = parsed["require"];
+      const parsed2 = JSON.parse(composer);
+      const deps = parsed2["require"];
       if (typeof deps === "object" && deps !== null) Object.keys(deps).forEach(add);
     } catch {
     }
@@ -35745,8 +38256,8 @@ function readPackageJson2(rootDir) {
   const raw = readText(path55.join(rootDir, "package.json"));
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null ? parsed : null;
+    const parsed2 = JSON.parse(raw);
+    return typeof parsed2 === "object" && parsed2 !== null ? parsed2 : null;
   } catch {
     return null;
   }
@@ -36113,8 +38624,8 @@ function storeKey(projectDir) {
 }
 function readStore() {
   try {
-    const parsed = JSON.parse(fs12.readFileSync(CREDENTIALS_FILE, "utf8"));
-    return typeof parsed === "object" && parsed !== null ? parsed : {};
+    const parsed2 = JSON.parse(fs12.readFileSync(CREDENTIALS_FILE, "utf8"));
+    return typeof parsed2 === "object" && parsed2 !== null ? parsed2 : {};
   } catch {
     return {};
   }
