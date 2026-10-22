@@ -35,9 +35,12 @@ inputs:
     required: false
     default: ${{ github.token }}
   cli-version:
-    description: 'Version of @archsetuweb/cli to run.'
+    description: >-
+      Leave empty to run the ArchSetu CLI bundled with this action, which needs
+      no download. Set a version (for example 0.1.23) to install that version
+      of @archsetuweb/cli from npm instead.
     required: false
-    default: '0.1.23'
+    default: ''
 
 outputs:
   changed-functions:
@@ -183,6 +186,7 @@ runs:
       shell: bash
       env:
         CLI_VERSION: ${{ inputs.cli-version }}
+        ACTION_PATH: ${{ github.action_path }}
         FAIL_ON: ${{ inputs.fail-on }}
         BASE: ${{ steps.base.outputs.base }}
         REVIEW_DIR: ${{ steps.base.outputs.dir }}
@@ -197,11 +201,18 @@ runs:
           args+=(--fail-on "$FAIL_ON")
         fi
 
-        # Run from outside the checkout, so npm neither reads the reviewed
-        # repository's .npmrc nor picks up a copy of the CLI from its node_modules.
+        # Run from outside the checkout, so neither the bundled CLI nor npm
+        # reads the reviewed repository's .npmrc or its node_modules.
         cd "$RUNNER_TEMP"
         status=0
-        npx --yes "@archsetuweb/cli@${CLI_VERSION}" "${args[@]}" || status=$?
+        if [ -z "$CLI_VERSION" ]; then
+          # The CLI and every dependency in one file: no registry involved, so
+          # an npm outage cannot fail the run, and the code is pinned by this
+          # action's own tag.
+          node "$ACTION_PATH/dist/archsetu.mjs" "${args[@]}" || status=$?
+        else
+          npx --yes "@archsetuweb/cli@${CLI_VERSION}" "${args[@]}" || status=$?
+        fi
 
         # 0: ran. 1: a fail-on check found something; the report is still
         # written and still gets posted. Anything else: the review did not run.

@@ -65,7 +65,7 @@ Each new push to the pull request updates the same comment, so the action never 
 | `fail-on` | empty | Comma-separated checks that fail the job: `security`, `complexity`, `unused`, `dependencies`. If empty, the job never fails because of findings. |
 | `comment` | `true` | Post the report as a pull request comment, and update that comment on later runs. |
 | `github-token` | `${{ github.token }}` | Token used to post the comment. It needs `pull-requests: write`. |
-| `cli-version` | `0.1.23` | Version of [`@archsetuweb/cli`](https://www.npmjs.com/package/@archsetuweb/cli) to run. |
+| `cli-version` | empty | Empty runs the ArchSetu CLI bundled with this action, with nothing to download. Set a version to install that version of [`@archsetuweb/cli`](https://www.npmjs.com/package/@archsetuweb/cli) from npm instead. |
 
 ## Outputs
 
@@ -108,7 +108,7 @@ Uncommitted and untracked files count as part of the change, so you can review w
 
 ## How it works and its limits
 
-The action installs the CLI with `npx`, at the version set in `cli-version`. The CLI parses the whole repository inside the CI run, not only the diff, and builds a call graph of its functions. It then reads `git diff` against the base and matches the changed lines to the functions that contain them. Nothing is uploaded: the analysis runs on the runner, and the only network traffic is installing the CLI from npm and posting the comment to GitHub. The analysis is deterministic. The same code always gives the same report, so you can check any number by running the review again, and if a number changes between two commits, it changed because the code did.
+The ArchSetu CLI ships inside this action as one file, `dist/archsetu.mjs`, with its dependencies bundled (their licences are in `dist/THIRD_PARTY_LICENSES.txt`), so a run downloads nothing and the code it runs is fixed by the tag you pin. The CLI parses the whole repository inside the CI run, not only the diff, and builds a call graph of its functions. It then reads `git diff` against the base and matches the changed lines to the functions that contain them. Nothing is uploaded: the analysis runs on the runner, and the only network traffic is fetching the base commit from your repository and posting the comment to GitHub. The analysis is deterministic. The same code always gives the same report, so you can check any number by running the review again, and if a number changes between two commits, it changed because the code did.
 
 The numbers come from static analysis. These are the rules that decide them:
 
