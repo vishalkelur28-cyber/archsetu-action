@@ -4,6 +4,8 @@ ArchSetu Review adds a comment to each pull request that shows what the change r
 
 ## Example
 
+See it live on a real pull request: [archsetu-action-demo#1](https://github.com/vishalkelur28-cyber/archsetu-action-demo/pull/1).
+
 Below is the report ArchSetu produced for [pocketbase](https://github.com/pocketbase/pocketbase) commit `5cdbca2` ("more strict cors quick subdomain checks to prevent misuse"), compared with the commit before it. On a pull request, this text is the comment.
 
 > <!-- archsetu-review -->
