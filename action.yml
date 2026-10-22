@@ -1,0 +1,299 @@
+name: 'ArchSetu Review'
+description: 'Comments on each pull request with the functions it changes, their callers and risk, and new security or complexity issues.'
+author: 'ArchSetu'
+
+branding:
+  icon: 'git-pull-request'
+  color: 'orange'
+
+inputs:
+  base:
+    description: >-
+      Branch or commit to compare with. Leave empty to use the commit the pull
+      request is merged onto (pull_request, pull_request_target), the merge queue's base
+      commit (merge_group) or the commit before the push (push). Required on
+      any other event.
+    required: false
+    default: ''
+  path:
+    description: 'Directory to review, relative to the workspace. Only changes inside it are reported.'
+    required: false
+    default: '.'
+  fail-on:
+    description: >-
+      Comma-separated checks that fail the job when the change adds something
+      they look for: security, complexity, unused, dependencies. Empty never
+      fails the job.
+    required: false
+    default: ''
+  comment:
+    description: "Post the report as a pull request comment, updating this action's earlier comment instead of adding another."
+    required: false
+    default: 'true'
+  github-token:
+    description: 'Token used to post the comment. It needs pull-requests: write.'
+    required: false
+    default: ${{ github.token }}
+  cli-version:
+    description: 'Version of @archsetuweb/cli to run.'
+    required: false
+    default: '0.1.23'
+
+outputs:
+  changed-functions:
+    description: 'How many functions the change touches. Empty when the review was skipped.'
+    value: ${{ steps.review.outputs.changed-functions }}
+  failed-checks:
+    description: 'The fail-on checks that found something, comma-separated. Empty when none did.'
+    value: ${{ steps.review.outputs.failed-checks }}
+  report:
+    description: 'Path to the JSON report.'
+    value: ${{ steps.review.outputs.report }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check Node.js
+      shell: bash
+      run: |
+        if ! command -v node >/dev/null 2>&1; then
+          echo "::error title=ArchSetu Review::Node.js was not found on this runner. Add actions/setup-node with node-version 20 or later before this action."
+          exit 1
+        fi
+        major="$(node -p 'process.versions.node.split(".")[0]')"
+        if [ "$major" -lt 20 ]; then
+          echo "::error title=ArchSetu Review::ArchSetu needs Node.js 20 or later, and this runner has $(node --version). Add actions/setup-node with node-version 20 or later before this action."
+          exit 1
+        fi
+
+    - name: Find the base commit
+      id: base
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_PATH: ${{ inputs.path }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      run: |
+        set -euo pipefail
+
+        base="$INPUT_BASE"
+        if [ -z "$base" ]; then
+          case "$EVENT_NAME" in
+            pull_request|pull_request_target)
+              base="$PR_BASE_SHA"
+              ;;
+            merge_group)
+              base="$MERGE_GROUP_BASE_SHA"
+              ;;
+            push)
+              # A push that creates a branch has no earlier commit; GitHub sends forty zeros.
+              if [ -z "$PUSH_BEFORE" ] || [ -z "${PUSH_BEFORE//0/}" ]; then
+                echo "::notice title=ArchSetu Review::This push created the branch, so there is no earlier commit to compare with. Skipping the review. To review new branches too, set the base input, for example base: main."
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              base="$PUSH_BEFORE"
+              ;;
+            *)
+              echo "::error title=ArchSetu Review::There is no base commit to compare with on a ${EVENT_NAME} event. Set the base input to a branch or commit, for example base: main."
+              exit 1
+              ;;
+          esac
+          if [ -z "$base" ]; then
+            echo "::error title=ArchSetu Review::The ${EVENT_NAME} event did not include a base commit. Set the base input to a branch or commit."
+            exit 1
+          fi
+        fi
+        case "$base$INPUT_PATH" in
+          *$'\n'*|*$'\r'*)
+            echo "::error title=ArchSetu Review::The base and path inputs must each be a single line."
+            exit 1
+            ;;
+        esac
+
+        dir="$(node -e 'process.stdout.write(require("path").resolve(process.env.GITHUB_WORKSPACE || ".", process.argv[1]))' -- "$INPUT_PATH")"
+        if [ ! -d "$dir" ]; then
+          echo "::error title=ArchSetu Review::The path input (${INPUT_PATH}) is not a directory in the workspace. Run actions/checkout before this action, and check the path."
+          exit 1
+        fi
+        if ! git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+          echo "::error title=ArchSetu Review::${dir} is not a git checkout. Run actions/checkout before this action."
+          exit 1
+        fi
+
+        # On pull_request, actions/checkout checks out GitHub's merge commit.
+        # Its first parent is exactly what the change was merged onto. The
+        # event's base sha can be older - a re-run after the base branch moved
+        # on - and comparing with it would count the base branch's newer
+        # commits as part of this change.
+        if [ -z "$INPUT_BASE" ] && [ "$EVENT_NAME" = "pull_request" ]; then
+          count=0
+          first=""
+          while read -r parent; do
+            count=$((count + 1))
+            if [ -z "$first" ]; then first="$parent"; fi
+          done < <(git -C "$dir" cat-file -p HEAD | sed -n 's/^parent //p')
+          if [ "$count" -eq 2 ]; then
+            base="$first"
+          fi
+        fi
+
+        # A shallow checkout (the actions/checkout default) has only the commit
+        # under review, so fetch the base commit when it is missing.
+        if ! git -C "$dir" cat-file -e "${base}^{commit}" 2>/dev/null; then
+          if git -C "$dir" cat-file -e "origin/${base}^{commit}" 2>/dev/null; then
+            base="origin/${base}"
+          else
+            ref="${base#origin/}"
+            echo "${base} is not in this checkout; fetching it from origin."
+            fetched=true
+            if [ "$(git -C "$dir" rev-parse --is-shallow-repository)" = "true" ]; then
+              git -C "$dir" fetch --no-tags --depth=1 origin "$ref" || fetched=false
+            else
+              git -C "$dir" fetch --no-tags origin "$ref" || fetched=false
+            fi
+            if [ "$fetched" != "true" ]; then
+              echo "::error title=ArchSetu Review::Could not fetch ${base} from origin. Set the base input to a branch or commit that exists in this repository."
+              exit 1
+            fi
+            if ! git -C "$dir" cat-file -e "${base}^{commit}" 2>/dev/null; then
+              # A branch fetched by name lands in FETCH_HEAD, not under its own name.
+              base="$(git -C "$dir" rev-parse FETCH_HEAD)"
+            fi
+          fi
+        fi
+
+        if [ "$(git -C "$dir" rev-parse HEAD)" = "$(git -C "$dir" rev-parse "${base}^{commit}")" ]; then
+          echo "::warning title=ArchSetu Review::The checked-out commit is the base commit itself, so no committed change is reviewed. On pull_request_target, actions/checkout checks out the base branch unless you set its ref input."
+        fi
+
+        echo "Reviewing ${dir} against ${base}."
+        {
+          echo "skip=false"
+          echo "base=${base}"
+          echo "dir=${dir}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Run archsetu review
+      id: review
+      if: steps.base.outputs.skip != 'true'
+      shell: bash
+      env:
+        CLI_VERSION: ${{ inputs.cli-version }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        BASE: ${{ steps.base.outputs.base }}
+        REVIEW_DIR: ${{ steps.base.outputs.dir }}
+      run: |
+        set -euo pipefail
+
+        report="$RUNNER_TEMP/archsetu-review.json"
+        rm -f "$report"
+
+        args=(review "$REVIEW_DIR" --base "$BASE" --json --out "$report")
+        if [ -n "$FAIL_ON" ]; then
+          args+=(--fail-on "$FAIL_ON")
+        fi
+
+        # Run from outside the checkout, so npm neither reads the reviewed
+        # repository's .npmrc nor picks up a copy of the CLI from its node_modules.
+        cd "$RUNNER_TEMP"
+        status=0
+        npx --yes "@archsetuweb/cli@${CLI_VERSION}" "${args[@]}" || status=$?
+
+        # 0: ran. 1: a fail-on check found something; the report is still
+        # written and still gets posted. Anything else: the review did not run.
+        if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+          echo "::error title=ArchSetu Review::archsetu review could not run (exit code ${status}). Its error is printed above."
+          exit "$status"
+        fi
+        if [ ! -s "$report" ]; then
+          echo "::error title=ArchSetu Review::archsetu review exited with code ${status} without writing a report. Its error is printed above."
+          exit 1
+        fi
+
+        node -e '
+          const fs = require("fs");
+          const file = require("path").resolve(process.argv[1]);
+          const report = JSON.parse(fs.readFileSync(file, "utf8"));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, report.markdown + "\n\n");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+            "changed-functions=" + report.changedFunctions.length,
+            "failed-checks=" + report.failedChecks.join(","),
+            "report=" + file,
+          ].join("\n") + "\n");
+          console.log(
+            report.changedFunctions.length + " changed functions. Failed checks: " +
+            (report.failedChecks.length > 0 ? report.failedChecks.join(", ") : "none") + "."
+          );
+        ' -- "$report"
+
+    - name: Post the pull request comment
+      if: >-
+        steps.base.outputs.skip != 'true' &&
+        inputs.comment == 'true' &&
+        (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      uses: actions/github-script@v8
+      env:
+        REPORT_PATH: ${{ steps.review.outputs.report }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const marker = '<!-- archsetu-review -->';
+          const maxLength = 65000;
+
+          const report = JSON.parse(fs.readFileSync(process.env.REPORT_PATH, 'utf8'));
+          let body = report.markdown.startsWith(marker) ? report.markdown : `${marker}\n${report.markdown}`;
+          if (body.length > maxLength) {
+            const note = '\n\n_The report was cut short to fit in a comment. The full report is in the job summary of this run._';
+            body = body.slice(0, maxLength - note.length) + note;
+          }
+
+          // A pull request that touches no function and adds nothing worth a
+          // look gets no new comment; an earlier one is still updated, so it
+          // never goes stale.
+          const nothingToSay = [
+            report.changedFunctions, report.securityFindings, report.complexityIncreases,
+            report.unusedNewFunctions, report.newUndeclaredImports,
+          ].every((list) => (list ?? []).length === 0);
+
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request.number;
+          try {
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const earlier = comments.find((c) => typeof c.body === 'string' && c.body.startsWith(marker));
+            if (earlier) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: earlier.id, body });
+              core.info(`Updated the ArchSetu review comment: ${earlier.html_url}`);
+            } else if (nothingToSay) {
+              core.info('This change touches no function ArchSetu parses and adds nothing to report, so no comment was posted.');
+            } else {
+              const { data } = await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              core.info(`Posted the ArchSetu review comment: ${data.html_url}`);
+            }
+          } catch (error) {
+            const readOnly = error.status === 403 || /Resource not accessible by integration/i.test(String(error.message));
+            if (readOnly) {
+              core.warning(
+                "Could not post the ArchSetu review comment: this run's token cannot write to the pull request. " +
+                'Pull requests from forks always get a read-only token; for other pull requests, give the job ' +
+                '"permissions: pull-requests: write". The full report is in the job summary.',
+              );
+            } else {
+              core.warning(`Could not post the ArchSetu review comment (${error.message}). The full report is in the job summary.`);
+            }
+          }
+
+    - name: Fail on checks
+      if: steps.review.outputs.failed-checks != ''
+      shell: bash
+      env:
+        FAILED_CHECKS: ${{ steps.review.outputs.failed-checks }}
+      run: |
+        echo "::error title=ArchSetu Review::This change failed the ArchSetu checks: ${FAILED_CHECKS}. The report is in the job summary."
+        exit 1
